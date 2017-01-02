@@ -1,0 +1,18 @@
+name: CommonerVote
+main: com.mcmiddleearth.commonerVote.CommonerVotePlugin
+version: 0.0.1
+author: Eriol_Eandur
+depend: [PluginUtils]
+
+commands:
+   vote:
+      description: Marks a player as away from keyboard, calling essentials /afk
+      usage: /afkk
+permissions:
+    commonervote.*:
+        description: Allows to use all features of commonerVote plugin
+        default: op
+        children:
+            commonervote.head: true
+            commonervote.staff: true
+            commonervote.user: true
