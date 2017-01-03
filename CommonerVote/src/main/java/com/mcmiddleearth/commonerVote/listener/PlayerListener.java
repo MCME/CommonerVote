@@ -18,8 +18,10 @@
  */
 package com.mcmiddleearth.commonerVote.listener;
 
+import com.mcmiddleearth.commonerVote.data.PluginData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerExpChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 
 /**
@@ -30,7 +32,16 @@ public class PlayerListener implements Listener{
     
     @EventHandler
     public void playerJoins(PlayerJoinEvent event) {
-        //recalculate xp bar
+        if(!event.getPlayer().hasPermission(PluginData.getApplicantPerm())) {
+            PluginData.clearVotes(event.getPlayer());
+        }
+        PluginData.promotePlayer(event.getPlayer());
+        PluginData.updateXpBar(event.getPlayer());
+    }
+    
+    @EventHandler
+    public void playerXpChange(PlayerExpChangeEvent event) {
+        event.setAmount(0);
     }
     
 }

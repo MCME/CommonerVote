@@ -23,6 +23,7 @@ import com.mcmiddleearth.commonerVote.data.PluginData;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 import lombok.Getter;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -38,14 +39,18 @@ public class VoteCommandExecutor implements CommandExecutor {
     private final Map <String, AbstractCommand> commands = new LinkedHashMap <>();
     
     public VoteCommandExecutor() {
-        addCommandHandler("", new VoteCommand(Permission.STAFF));
-        addCommandHandler("review", new VoteReview(Permission.HEAD));
-        addCommandHandler("score", new VoteScore(Permission.USER));
+        addCommandHandler("", new VoteCommand(Permission.VOTE));
+        addCommandHandler("review", new VoteReview(Permission.REVIEW));
+        addCommandHandler("score", new VoteScore(Permission.SCORE));
+        addCommandHandler("clear", new VoteClear(Permission.CLEAR));
+        addCommandHandler("apply", new VoteApply(Permission.APPLY));
+        addCommandHandler("config", new VoteConfig(Permission.CONFIG));
+        addCommandHandler("withdraw", new VoteWithdraw(Permission.VOTE));
     }
     
     @Override
     public boolean onCommand(CommandSender cs, Command cmnd, String string, String[] strings) {
-        if(!string.equalsIgnoreCase("plot")) {
+        if(!string.equalsIgnoreCase("vote")) {
             return false;
         }
         if(strings == null || strings.length == 0) {
@@ -55,13 +60,13 @@ public class VoteCommandExecutor implements CommandExecutor {
         if(commands.containsKey(strings[0].toLowerCase())) {
             commands.get(strings[0].toLowerCase()).handle(cs, Arrays.copyOfRange(strings, 1, strings.length));
         } else {
-            sendSubcommandNotFoundErrorMessage(cs);
+            commands.get("").handle(cs, Arrays.copyOfRange(strings, 0, strings.length));
         }
         return true;
     }
     
     private void sendNoSubcommandErrorMessage(CommandSender cs) {
-        PluginData.getMessageUtil().sendErrorMessage(cs, "You're missing subcommand name for this command.");
+        PluginData.getMessageUtil().sendErrorMessage(cs, "Not enough arguments for this command.");
     }
     
     private void sendSubcommandNotFoundErrorMessage(CommandSender cs) {

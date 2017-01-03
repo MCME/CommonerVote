@@ -6,13 +6,38 @@ depend: [PluginUtils]
 
 commands:
    vote:
-      description: Marks a player as away from keyboard, calling essentials /afk
-      usage: /afkk
+      description: Manages voting for commoner rank applicants
+      usage: /vote [score | review | withdraw | apply | config | clear]
 permissions:
     commonervote.*:
         description: Allows to use all features of commonerVote plugin
         default: op
         children:
-            commonervote.head: true
+            commonervote.clear: true
+            commonervote.review: true
+            commonervote.score.other: true
             commonervote.staff: true
-            commonervote.user: true
+            commonervote.apply: true
+            commonervote.config: true
+    commonervote.clear:
+        description: Allows to clear all votes for a player
+    commonervote.review:
+        description: Allows to see a list of all votes for a player
+    commonervote.score.other:
+        description: Allows to see the amount of votes for other players
+        children:
+            commonervote.score: true
+    commonervote.staff:
+        description: Allows to vote with staff vote weight
+        children:
+            commonervote.vote: true
+    commonervote.voter:
+        description: Allows to vote for a player
+    commonervote.score:
+        description: Allows to see the amount of own votes
+    commonervote.apply:
+        description: Allows to apply for recieving commoner votes
+    commonervote.config:
+        description: Allows to modify plugin configuration
+        
+        

@@ -18,10 +18,12 @@
  */
 package com.mcmiddleearth.commonerVote.command;
 
-import com.mcmiddleearth.commonerVote.data.Permission;
 import com.mcmiddleearth.commonerVote.data.PluginData;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -41,9 +43,6 @@ public abstract class AbstractCommand {
     @Getter
     @Setter
     private String usageDescription, shortDescription;
-    
-    @Setter
-    private boolean additionalPermissionsEnabled = false;
     
     public AbstractCommand(int minArgs, boolean playerOnly, String... permissionNodes) {
         this.minArgs = minArgs;
@@ -75,7 +74,35 @@ public abstract class AbstractCommand {
         execute(cs, args);
     }
     
+    private boolean hasPermissions(Player p) {
+        if(permissionNodes != null) {
+            for(String permission : permissionNodes) {
+                if (!p.hasPermission(permission)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    
     protected abstract void execute(CommandSender cs, String... args);
+    
+    protected OfflinePlayer getOfflinePlayer(CommandSender cs, String playerName) {
+        List<Player> player = Bukkit.matchPlayer(playerName);
+        if(player.size()>1) {
+            return null;
+        } else if(player.size()==1) {
+            return player.get(0);
+        } else {
+            OfflinePlayer offline = Bukkit.getOfflinePlayer(playerName);
+            if(offline.hasPlayedBefore()) {
+                return offline;
+            } else {
+                sendPlayerNotFoundMessage(cs);
+                return null;
+            }
+        }
+    }
     
     protected void sendPlayerOnlyErrorMessage(CommandSender cs) {
         PluginData.getMessageUtil().sendErrorMessage(cs, "You have to be logged in to run this command.");
@@ -90,21 +117,16 @@ public abstract class AbstractCommand {
     }
     
     protected void sendPlayerNotFoundMessage(CommandSender cs) {
-        PluginData.getMessageUtil().sendErrorMessage(cs, "Player not found or more than one player found. For players who are offline you have to type in the full name");
+        PluginData.getMessageUtil().sendErrorMessage(cs, "Player not found. For players who are offline you have to type in the full name");
     }
         
-    private boolean hasPermissions(Player p) {
-        if(!p.hasPermission(Permission.USER)) {
-            return false;
-        }
-        if(permissionNodes != null && !additionalPermissionsEnabled) {
-            for(String permission : permissionNodes) {
-                if (!p.hasPermission(permission)) {
-                    return false;
-                }
-            }
-        }
-        return true;
+    protected void sendMoreThanOnePlayerFoundMessage(CommandSender cs) {
+            PluginData.getMessageUtil().sendErrorMessage(cs, "More than one player found.");
     }
+    
+    protected void sendNotAppliedError(CommandSender cs) {
+        PluginData.getMessageUtil().sendErrorMessage(cs, "Player has not applied for Commoner rank.");
+    }
+
     
 }

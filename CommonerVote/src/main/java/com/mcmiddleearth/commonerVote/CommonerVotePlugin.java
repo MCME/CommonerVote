@@ -20,8 +20,10 @@ package com.mcmiddleearth.commonerVote;
 
 import com.mcmiddleearth.commonerVote.data.PluginData;
 import com.mcmiddleearth.commonerVote.command.VoteCommandExecutor;
+import com.mcmiddleearth.commonerVote.data.Vote;
 import com.mcmiddleearth.commonerVote.listener.PlayerListener;
 import lombok.Getter;
+import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -36,10 +38,11 @@ public class CommonerVotePlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         pluginInstance = this;
-        this.saveDefaultConfig();
+        ConfigurationSerialization.registerClass(Vote.class);
+        PluginData.loadConfig();
+        PluginData.loadData();
         getServer().getPluginManager().registerEvents(new PlayerListener(), this);
         getCommand("vote").setExecutor(new VoteCommandExecutor());
-        PluginData.loadData();
         getLogger().info("Enabled!");
     }
     
