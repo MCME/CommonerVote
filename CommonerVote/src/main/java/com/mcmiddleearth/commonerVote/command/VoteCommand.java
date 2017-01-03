@@ -18,7 +18,11 @@
  */
 package com.mcmiddleearth.commonerVote.command;
 
+import com.mcmiddleearth.commonerVote.data.PluginData;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 /**
  *
@@ -27,14 +31,49 @@ import org.bukkit.command.CommandSender;
 public class VoteCommand extends AbstractCommand {
     
     public VoteCommand(String... permissionNodes) {
-        super(0, true, permissionNodes);
-        setAdditionalPermissionsEnabled(true);
+        super(1, true, permissionNodes);
         setShortDescription(": Votes for a player.");
-        setUsageDescription(": When inside a finished plot, accepts the build inside the plot, removes the build perms for builders and the borders and messages the builders.");
+        setUsageDescription("<playerName>: Give your vote for promoting <playerName> to Commoner.");
     }
     
     @Override
     protected void execute(CommandSender cs, String... args) {
+        OfflinePlayer p = getOfflinePlayer(cs,args[0]);
+        if(p==null) {
+            return;
+        }
+        if(p.isOnline()) {
+            if(!p.getPlayer().hasPermission(PluginData.getApplicantPerm())) {
+                sendNoValidApplicant(cs);
+                return;
+            }
+        }
+        if(PluginData.isApplicationNeeded() && !PluginData.hasApplied(p)) {
+            sendNotAppliedError(cs);
+            return;
+        }
+        if(p.getUniqueId().equals(((Player)cs).getUniqueId())) {
+            sendDontBeStupidError(cs);
+            return;
+        }
+        String reason = "";
+        for(int i = 1; i<args.length; i++) {
+            reason = reason + args[i];
+        }
+        PluginData.addVote((Player) cs, p, reason);
+        sendVotedMessage(cs);
+    }
+
+    private void sendVotedMessage(CommandSender cs) {
+        PluginData.getMessageUtil().sendInfoMessage(cs, "Your vote was registered.");
+    }
+
+    private void sendDontBeStupidError(CommandSender cs) {
+        PluginData.getMessageUtil().sendErrorMessage(cs, "It's really cringy to vote for yourself.");
+    }
+
+    private void sendNoValidApplicant(CommandSender cs) {
+        PluginData.getMessageUtil().sendErrorMessage(cs, "You can't vote for this player.");
     }
 
 }

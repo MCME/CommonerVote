@@ -26,9 +26,15 @@ public final class Permission {
     
     private Permission() { }
     
-    public static final String USER = "commonervote.user";
+    public static final String CLEAR = "commonervote.clear";
+    public static final String REVIEW = "commonervote.review";
     
     public static final String STAFF = "commonervote.staff";
+    public static final String VOTE = "commonervote.vote";
 
-    public static final String HEAD = "commonervote.head";
+    public static final String SCORE = "commonervote.score";
+    public static final String SCORE_OTHER = "commonervote.score.other";
+    public static final String APPLY = "commonervote.apply";
+    public static final String CONFIG = "commonervote.config";
+
 }

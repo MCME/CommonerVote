@@ -18,7 +18,18 @@
  */
 package com.mcmiddleearth.commonerVote.command;
 
+import com.mcmiddleearth.commonerVote.data.PluginData;
+import com.mcmiddleearth.commonerVote.data.Vote;
+import com.mcmiddleearth.pluginutil.NumericUtil;
+import com.mcmiddleearth.pluginutil.message.FancyMessage;
+import com.mcmiddleearth.pluginutil.message.MessageType;
+import java.util.ArrayList;
+import java.util.List;
+import net.md_5.bungee.api.ChatColor;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 
 /**
  *
@@ -27,14 +38,54 @@ import org.bukkit.command.CommandSender;
 public class VoteReview extends AbstractCommand {
     
     public VoteReview(String... permissionNodes) {
-        super(0, true, permissionNodes);
-        setAdditionalPermissionsEnabled(true);
-        setShortDescription(": Accepts a finished plot.");
-        setUsageDescription(": When inside a finished plot, accepts the build inside the plot, removes the build perms for builders and the borders and messages the builders.");
+        super(1, true, permissionNodes);
+        setShortDescription(": Shows all valid votes for a player.");
+        setUsageDescription("<playerName>: Shows all valid votes for <playerName>.");
     }
     
     @Override
     protected void execute(CommandSender cs, String... args) {
+        OfflinePlayer p = getOfflinePlayer(cs,args[0]);
+        if(p==null) {
+            return;
+        }
+        if(PluginData.isApplicationNeeded() && !PluginData.hasApplied(p)) {
+            sendNotAppliedError(cs);
+            return;
+        }
+        List<Vote> votes = PluginData.getVotes(p);
+        if(votes==null) {
+            sendNoVotesMessage(cs);
+            return;
+        }
+        int page = 1;
+        if(args.length>1 && NumericUtil.isInt(args[1])) {
+            page = NumericUtil.getInt(args[1]);
+        }
+        FancyMessage header = new FancyMessage(MessageType.INFO,
+                                                PluginData.getMessageUtil())
+                                        .addSimple("Commoner votes for "+p.getName());
+        List<FancyMessage> messages = new ArrayList<>();
+        for(Vote vote:votes) {
+            int timeAgo = (int)((System.currentTimeMillis()-vote.getTimestamp())/1000/3600/24);
+            String voter = Bukkit.getOfflinePlayer(vote.getVoter()).getName();
+            String reason = vote.getReason();
+            FancyMessage message = new FancyMessage(MessageType.INFO_NO_PREFIX,
+                                                    PluginData.getMessageUtil())
+                                            .addSimple("- "+ChatColor.GREEN+timeAgo
+                                                       +ChatColor.AQUA + " days ago from "
+                                                       +ChatColor.GREEN+voter);
+            if(!reason.equals("")) {
+                message.addSimple(". Reason: "+reason);
+            }
+            messages.add(message);
+        }
+        PluginData.getMessageUtil().sendFancyListMessage((Player)cs, header, messages,
+                                                         "/vote review", page);
+    }
+    
+    private void sendNoVotesMessage(CommandSender cs) {
+        PluginData.getMessageUtil().sendInfoMessage(cs,"This player has no votes yet.");
     }
     
 }

@@ -18,13 +18,23 @@
  */
 package com.mcmiddleearth.commonerVote.data;
 
+import com.mcmiddleearth.commonerVote.CommonerVotePlugin;
+import com.mcmiddleearth.pluginutil.NumericUtil;
 import com.mcmiddleearth.pluginutil.message.MessageUtil;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import lombok.Getter;
+import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
 /**
@@ -34,33 +44,257 @@ import org.bukkit.entity.Player;
 public class PluginData {
     
     @Getter
-    private final static MessageUtil messageUtil;
+    private final static MessageUtil messageUtil = new MessageUtil();
     
-    private final static Map<UUID,List<Vote>> playerVotes;
+    private final static Map<UUID,List<Vote>> playerVotes = new HashMap<>();
     
     @Getter
-    private static long storageTime = 30*24*3600*1000; //one month
+    private static long storageTime = ((long)30)*24*3600*1000; //one month
+    
+    private static int neededVotes = 16;
+    
+    private static int staffVoteWeight = 2;
+    
+    private static int otherVoteWeight = 1;
+    
+    private static boolean allowMultipleVoting = false;
+    
+    private static boolean automatedPromotion = false;
+    
+    private static boolean useXpBar = true;
+    
+    @Getter
+    private static boolean applicationNeeded = false;
+    
+    private static final File configFile = new File(CommonerVotePlugin.getPluginInstance()
+                                                .getDataFolder(),"config.yml");
+    private static final File dataFile = new File(CommonerVotePlugin.getPluginInstance()
+                                                .getDataFolder(),"votes.yml");
     
     static {
-        messageUtil = new MessageUtil();
         messageUtil.setPluginName("CommonerVote");
-        playerVotes = new HashMap<>();
     }
     
     public static void loadData() {
-        
+        playerVotes.clear();
+        YamlConfiguration config = new YamlConfiguration();
+        try {
+            config.load(dataFile);
+        } catch (IOException | InvalidConfigurationException ex) {
+            Logger.getLogger(PluginData.class.getName()).log(Level.WARNING, "No voting data file found.", ex);
+            return;
+        }
+        for(String id: config.getKeys(false)) {
+            List<Vote> votes = (List<Vote>) config.getList(id);
+            playerVotes.put(UUID.fromString(id), votes);
+        }
     }
     
     public static void saveData() {
-        
+        YamlConfiguration config = new YamlConfiguration();
+        for(UUID player: playerVotes.keySet()) {
+            //ConfigurationSection section = config.createSection(player.toString());
+            List<Vote> votes = playerVotes.get(player);
+            clearOldVotes(votes);
+            config.set(player.toString(), votes);
+            }
+        try {
+            config.save(dataFile);
+        } catch (IOException ex) {
+            Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
-    public static void addVote(Player voter, OfflinePlayer recipient) {
-        
+    public static void loadConfig() {
+        YamlConfiguration config = new YamlConfiguration();
+        try {
+            config.load(configFile);
+        } catch (IOException | InvalidConfigurationException ex) {
+            try {
+                config.save(configFile);
+            } catch (IOException ex1) {
+                Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex1);
+            }
+            return;
+        }
+        storageTime=(long)(config.getInt("validityPeriod", (int)(storageTime/1000/3600/24)))*24*3600*1000;
+        staffVoteWeight=config.getInt("staffWeight", staffVoteWeight);
+        otherVoteWeight=config.getInt("otherWeight", otherVoteWeight);
+        neededVotes=config.getInt("votesNeeded", neededVotes);
+        allowMultipleVoting=config.getBoolean("allowMultipleVotes", allowMultipleVoting);
+        automatedPromotion=config.getBoolean("automatedPromotion", automatedPromotion);
+        useXpBar=config.getBoolean("useXpBar", useXpBar);
+        applicationNeeded=config.getBoolean("applicationNeeded", applicationNeeded);
+    }
+    
+    public static void saveConfig() {
+        YamlConfiguration config = getConfig();
+        saveConfig_internal(config);
+    }
+    
+    private static void saveConfig_internal(YamlConfiguration config) {
+        try {
+            config.save(configFile);
+        } catch (IOException ex) {
+            Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+    
+    public static YamlConfiguration getConfig() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("validityPeriod", storageTime/1000/3600/24);
+        config.set("staffWeight", staffVoteWeight);
+        config.set("otherWeight", otherVoteWeight);
+        config.set("votesNeeded", neededVotes);
+        config.set("allowMultipleVotes", allowMultipleVoting);
+        config.set("automatedPromotion", automatedPromotion);
+        config.set("useXpBar", useXpBar);
+        config.set("applicationNeeded", applicationNeeded);
+        return config;
+    }
+    
+    public static boolean setConfig(String key, String value) {
+        YamlConfiguration config = getConfig();
+        if(!config.contains(key)) {
+            return false;
+        } else if(config.isInt(key)) {
+            if(NumericUtil.isInt(value)) {
+                config.set(key, NumericUtil.getInt(value));
+                saveConfig_internal(config);
+                loadConfig();
+                return true;
+            } else {
+                return false;
+            }
+        } else if(config.isBoolean(key)) {
+            config.set(key, Boolean.parseBoolean(value));
+            saveConfig_internal(config);
+            loadConfig();
+            return true;
+        } else {
+            config.set(key, value);
+            saveConfig_internal(config);
+            loadConfig();
+            return true;
+        }
+    }
+    
+    public static void apply(OfflinePlayer applicant) {
+        List<Vote> votes = playerVotes.get(applicant.getUniqueId());        
+        if(votes==null) {
+            votes = new ArrayList<>();
+            playerVotes.put(applicant.getUniqueId(), votes);
+        }
+    }
+    
+    public static void addVote(Player voter, OfflinePlayer recipient, String reason) {
+        List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
+        if(!applicationNeeded) {
+           apply(recipient);
+           votes = playerVotes.get(recipient.getUniqueId());
+        } else if(votes==null) {
+            return;
+        }
+        if(!allowMultipleVoting) {
+            withdrawVote_internal(voter, recipient);
+        }
+        Vote vote = new Vote(voter, getVotingWeight(voter), reason);
+        votes.add(vote);
+        promotePlayer(recipient);
+        saveData();
+        updateXpBar(recipient);
     }
     
     public static void withdrawVote(Player voter, OfflinePlayer recipient) {
-        
+        withdrawVote_internal(voter, recipient);
+        saveData();
+        updateXpBar(recipient);
+    }
+ 
+    public static void promotePlayer(OfflinePlayer player) {
+        if(automatedPromotion
+                && player.isOnline()
+                && calculateScore(player.getUniqueId())>=neededVotes
+                && player.getPlayer().hasPermission(getApplicantPerm())) {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "promote "+player.getName());
+            messageUtil.sendInfoMessage(player.getPlayer(),
+                         messageUtil.HIGHLIGHT_STRESSED+"You were promoted to Commoner rank. Congrats!");
+            player.getPlayer().recalculatePermissions();
+            if(!player.getPlayer().hasPermission(getApplicantPerm())) {
+                clearVotes(player);
+            }
+        }
+
+    }
+    private static void withdrawVote_internal(Player voter, OfflinePlayer recipient) {
+        List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
+        if(votes!=null) {
+            List<Vote> removalList = new ArrayList<>();
+            for(Vote vote: votes) {
+                if(vote.getVoter().equals(voter.getUniqueId())) {
+                    removalList.add(vote);
+                }
+            }
+            votes.removeAll(removalList);
+        }
+    }
+
+    public static void clearVotes(OfflinePlayer player) {
+        playerVotes.remove(player.getUniqueId());
+        saveData();
+        updateXpBar(player);
     }
     
+    public static void updateXpBar(OfflinePlayer player) {
+        if(useXpBar && player.isOnline()) {
+            player.getPlayer().setLevel(0);
+            int score = calculateScore(player.getUniqueId());
+            player.getPlayer().setExp(((float)score)/neededVotes);
+        }
+    }
+    
+    public static int calculateScore(UUID player) {
+        List<Vote> votes = playerVotes.get(player);
+        if(votes==null) {
+            return 0;
+        } else {
+            int result=0;
+            for(Vote vote: votes) {
+                if(vote.isValid()) {
+                    result+=vote.getWeight();
+                }
+            }
+            return result;
+        }
+    }
+    
+    public static List<Vote> getVotes(OfflinePlayer player) {
+        return playerVotes.get(player.getUniqueId());
+    }
+    
+    public static boolean hasApplied(OfflinePlayer player) {
+        return playerVotes.containsKey(player.getUniqueId());
+    }
+    
+    public static String getApplicantPerm() {
+        return Permission.APPLY;//"group."+applicantGroup;
+    }
+    
+    private static int getVotingWeight(Player player) {
+        if(player.hasPermission(Permission.STAFF)) {
+            return staffVoteWeight;
+        } else {
+            return otherVoteWeight;
+        }
+    }
+    
+    private static void clearOldVotes(List<Vote> votes) {
+        List<Vote> old = new ArrayList<>();
+        for(Vote vote:votes) {
+            if(!vote.isValid()) {
+                old.add(vote);
+            }
+        }
+        votes.removeAll(old);
+    }
 }

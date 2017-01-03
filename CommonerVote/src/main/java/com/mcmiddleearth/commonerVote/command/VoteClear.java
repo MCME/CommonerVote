@@ -20,6 +20,7 @@ package com.mcmiddleearth.commonerVote.command;
 
 import com.mcmiddleearth.commonerVote.data.Permission;
 import com.mcmiddleearth.commonerVote.data.PluginData;
+import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -28,35 +29,26 @@ import org.bukkit.entity.Player;
  *
  * @author Eriol_Eandur
  */
-public class VoteScore extends AbstractCommand {
+public class VoteClear extends AbstractCommand {
     
-    public VoteScore(String... permissionNodes) {
-        super(0, true, permissionNodes);
-        setShortDescription(": Shows the amount of votes of a player.");
-        setUsageDescription("[playerName]: Without optional Argument [Playername] shows the amount of votes for the player who issued the command. Otherwise for the named player.");
+    public VoteClear(String... permissionNodes) {
+        super(1, true, permissionNodes);
+        setShortDescription(": Clears all votes for a player.");
+        setUsageDescription("<playerName>: Clears all votes for <playerName>.");
     }
     
     @Override
     protected void execute(CommandSender cs, String... args) {
-        Player player = (Player) cs;
-        if(!player.hasPermission(Permission.SCORE_OTHER) || args.length==0) {
-            sendScoreMessage(cs,PluginData.calculateScore(player.getUniqueId()));
-            return;
-        }
         OfflinePlayer p = getOfflinePlayer(cs,args[0]);
         if(p==null) {
             return;
         }
-        sendOtherScoreMessage(cs, args[0],
-                              PluginData.calculateScore(p.getUniqueId()));
+        PluginData.clearVotes(p);
+        sendClearedMessage(cs);
     }
 
-    private void sendScoreMessage(CommandSender cs, int calculatedScore) {
-        PluginData.getMessageUtil().sendInfoMessage(cs, "You have got "+calculatedScore+" votes.");
+    private void sendClearedMessage(CommandSender cs) {
+        PluginData.getMessageUtil().sendInfoMessage(cs, "Votes cleared.");
     }
 
-    private void sendOtherScoreMessage(CommandSender cs, String name, int calculatedScore) {
-        PluginData.getMessageUtil().sendInfoMessage(cs, name+" has got "+calculatedScore+" votes.");
-    }
-    
 }
