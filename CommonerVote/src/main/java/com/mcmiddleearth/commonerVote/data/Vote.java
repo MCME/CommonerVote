@@ -60,7 +60,11 @@ public final class Vote implements ConfigurationSerializable {
     }
     
     public boolean isValid() {
-        return System.currentTimeMillis()-timestamp<PluginData.getStorageTime();
+        if(PluginData.getStorageTime()>0) {
+            return System.currentTimeMillis()-timestamp<PluginData.getStorageTime();
+        } else {
+            return true;
+        }
     }
 
     @Override

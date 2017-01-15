@@ -1,6 +1,6 @@
 name: CommonerVote
 main: com.mcmiddleearth.commonerVote.CommonerVotePlugin
-version: 0.0.1
+version: 1.0.0
 author: Eriol_Eandur
 depend: [PluginUtils]
 

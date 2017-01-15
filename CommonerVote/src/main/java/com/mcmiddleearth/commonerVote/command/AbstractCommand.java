@@ -74,7 +74,7 @@ public abstract class AbstractCommand {
         execute(cs, args);
     }
     
-    private boolean hasPermissions(Player p) {
+    public boolean hasPermissions(CommandSender p) {
         if(permissionNodes != null) {
             for(String permission : permissionNodes) {
                 if (!p.hasPermission(permission)) {

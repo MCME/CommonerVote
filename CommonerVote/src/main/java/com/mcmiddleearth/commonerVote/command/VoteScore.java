@@ -38,6 +38,7 @@ public class VoteScore extends AbstractCommand {
     
     @Override
     protected void execute(CommandSender cs, String... args) {
+        PluginData.clearOldVotes();
         Player player = (Player) cs;
         if(!player.hasPermission(Permission.SCORE_OTHER) || args.length==0) {
             sendScoreMessage(cs,PluginData.calculateScore(player.getUniqueId()));
