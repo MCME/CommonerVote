@@ -46,6 +46,7 @@ public class VoteCommandExecutor implements CommandExecutor {
         addCommandHandler("apply", new VoteApply(Permission.APPLY));
         addCommandHandler("config", new VoteConfig(Permission.CONFIG));
         addCommandHandler("withdraw", new VoteWithdraw(Permission.VOTE));
+        addCommandHandler("help", new VoteHelp(new String[0]));
     }
     
     @Override

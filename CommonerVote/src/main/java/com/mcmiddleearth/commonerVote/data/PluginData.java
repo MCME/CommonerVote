@@ -31,6 +31,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import lombok.Getter;
+import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -57,6 +58,9 @@ public class PluginData {
     
     private static int otherVoteWeight = 1;
     
+    @Getter
+    private static String commonerGroup = "Commoner";
+
     private static boolean allowMultipleVoting = false;
     
     private static boolean automatedPromotion = false;
@@ -72,7 +76,7 @@ public class PluginData {
                                                 .getDataFolder(),"votes.yml");
     
     static {
-        messageUtil.setPluginName("CommonerVote");
+        messageUtil.setPluginName("Vote");
     }
     
     public static void loadData() {
@@ -117,7 +121,7 @@ public class PluginData {
             }
             return;
         }
-        storageTime=(long)(config.getInt("validityPeriod", (int)(storageTime/1000/3600/24)))*24*3600*1000;
+        storageTime=(long)(NumericUtil.getInt(config.getString("validityPeriod", "30"))*(long)24*3600*1000);
         staffVoteWeight=config.getInt("staffWeight", staffVoteWeight);
         otherVoteWeight=config.getInt("otherWeight", otherVoteWeight);
         neededVotes=config.getInt("votesNeeded", neededVotes);
@@ -125,6 +129,7 @@ public class PluginData {
         automatedPromotion=config.getBoolean("automatedPromotion", automatedPromotion);
         useXpBar=config.getBoolean("useXpBar", useXpBar);
         applicationNeeded=config.getBoolean("applicationNeeded", applicationNeeded);
+        commonerGroup = config.getString("commonerGroupName", commonerGroup);
     }
     
     public static void saveConfig() {
@@ -150,6 +155,7 @@ public class PluginData {
         config.set("automatedPromotion", automatedPromotion);
         config.set("useXpBar", useXpBar);
         config.set("applicationNeeded", applicationNeeded);
+        config.set("commonerGroupName", commonerGroup);
         return config;
     }
     
@@ -211,16 +217,25 @@ public class PluginData {
         updateXpBar(recipient);
     }
  
+    public static boolean hasVoted(Player voter, OfflinePlayer recipient) {
+        List<Vote> votes = playerVotes.get(recipient.getUniqueId());
+        for(Vote vote: votes) {
+            if(vote.getVoter().equals(voter.getUniqueId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
     public static void promotePlayer(OfflinePlayer player) {
         if(automatedPromotion
                 && player.isOnline()
                 && calculateScore(player.getUniqueId())>=neededVotes
-                && player.getPlayer().hasPermission(getApplicantPerm())) {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "promote "+player.getName());
-            messageUtil.sendInfoMessage(player.getPlayer(),
-                         messageUtil.HIGHLIGHT_STRESSED+"You were promoted to Commoner rank. Congrats!");
+                && !player.getPlayer().hasPermission(getCommonerPerm())) {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "pex user "+player.getName()+" group set "+commonerGroup.toLowerCase());
+            sendPromotionMessage(player.getPlayer());
             player.getPlayer().recalculatePermissions();
-            if(!player.getPlayer().hasPermission(getApplicantPerm())) {
+            if(player.getPlayer().hasPermission(getCommonerPerm())) {
                 clearVotes(player);
             }
         }
@@ -249,7 +264,7 @@ public class PluginData {
         if(useXpBar && player.isOnline()) {
             player.getPlayer().setLevel(0);
             int score = calculateScore(player.getUniqueId());
-            player.getPlayer().setExp(((float)score)/neededVotes);
+            player.getPlayer().setExp(Math.min(((float)score)/neededVotes,1));
         }
     }
     
@@ -276,8 +291,18 @@ public class PluginData {
         return playerVotes.containsKey(player.getUniqueId());
     }
     
-    public static String getApplicantPerm() {
-        return Permission.APPLY;//"group."+applicantGroup;
+    public static String getCommonerPerm() {
+        return "group."+commonerGroup.toLowerCase();
+    }
+    
+    public static List<UUID> getPromoteablePlayers() {
+        List<UUID> result = new ArrayList<>();
+        for(UUID id:playerVotes.keySet()) {
+            if(calculateScore(id)>=neededVotes) {
+                result.add(id);
+            }
+        }
+        return result;
     }
     
     private static int getVotingWeight(Player player) {
@@ -285,6 +310,20 @@ public class PluginData {
             return staffVoteWeight;
         } else {
             return otherVoteWeight;
+        }
+    }
+    
+    public static void clearOldVotes() {
+        List<UUID> invalidVotes = new ArrayList<>();
+        for(UUID id: playerVotes.keySet()) {
+            clearOldVotes(playerVotes.get(id));
+            OfflinePlayer player = Bukkit.getOfflinePlayer(id);
+            if(player.isOnline() && player.getPlayer().hasPermission(getCommonerPerm())) {
+                invalidVotes.add(id);
+            }
+        }
+        for(UUID id: invalidVotes) {
+            playerVotes.remove(id);
         }
     }
     
@@ -296,5 +335,16 @@ public class PluginData {
             }
         }
         votes.removeAll(old);
+    }
+    
+    public static void sendPromotionMessage(Player player) {
+        messageUtil.sendInfoMessage(player.getPlayer(),
+                            ""+ChatColor.GOLD+ChatColor.BOLD+"Congrats!!! "
+                           +ChatColor.YELLOW+"You were promoted to "
+                           +ChatColor.GOLD+commonerGroup+ChatColor.YELLOW+" rank.");
+    }
+            
+    public static boolean getAllowMultipleVoting() {
+        return allowMultipleVoting;
     }
 }

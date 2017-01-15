@@ -32,7 +32,7 @@ public class PlayerListener implements Listener{
     
     @EventHandler
     public void playerJoins(PlayerJoinEvent event) {
-        if(!event.getPlayer().hasPermission(PluginData.getApplicantPerm())) {
+        if(event.getPlayer().hasPermission(PluginData.getCommonerPerm())) {
             PluginData.clearVotes(event.getPlayer());
         }
         PluginData.promotePlayer(event.getPlayer());

@@ -19,7 +19,6 @@
 package com.mcmiddleearth.commonerVote.command;
 
 import com.mcmiddleearth.commonerVote.data.PluginData;
-import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -43,7 +42,7 @@ public class VoteCommand extends AbstractCommand {
             return;
         }
         if(p.isOnline()) {
-            if(!p.getPlayer().hasPermission(PluginData.getApplicantPerm())) {
+            if(p.getPlayer().hasPermission(PluginData.getCommonerPerm())) {
                 sendNoValidApplicant(cs);
                 return;
             }
@@ -60,8 +59,12 @@ public class VoteCommand extends AbstractCommand {
         for(int i = 1; i<args.length; i++) {
             reason = reason + args[i];
         }
-        PluginData.addVote((Player) cs, p, reason);
-        sendVotedMessage(cs);
+        if(!PluginData.getAllowMultipleVoting() && PluginData.hasVoted((Player)cs, p)) {
+            sendAlreadyVotedMessage(cs);
+        } else {
+            PluginData.addVote((Player) cs, p, reason);
+            sendVotedMessage(cs);
+        }
     }
 
     private void sendVotedMessage(CommandSender cs) {
@@ -70,6 +73,10 @@ public class VoteCommand extends AbstractCommand {
 
     private void sendDontBeStupidError(CommandSender cs) {
         PluginData.getMessageUtil().sendErrorMessage(cs, "It's really cringy to vote for yourself.");
+    }
+
+    private void sendAlreadyVotedMessage(CommandSender cs) {
+        PluginData.getMessageUtil().sendErrorMessage(cs, "You already voted for this player.");
     }
 
     private void sendNoValidApplicant(CommandSender cs) {

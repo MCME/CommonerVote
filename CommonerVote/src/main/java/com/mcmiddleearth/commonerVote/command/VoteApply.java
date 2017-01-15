@@ -30,8 +30,8 @@ public class VoteApply extends AbstractCommand {
     
     public VoteApply(String... permissionNodes) {
         super(0, true, permissionNodes);
-        setShortDescription(": Applys for receiving commoner votes.");
-        setUsageDescription(": Applys for receiving commoner votes.");
+        setShortDescription(": Applys for receiving votes.");
+        setUsageDescription(": Applys for receiving votes.");
     }
     
     @Override
