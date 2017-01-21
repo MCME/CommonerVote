@@ -39,5 +39,7 @@ permissions:
         description: Allows to apply for recieving commoner votes
     commonervote.config:
         description: Allows to modify plugin configuration
+    commonervote.exempt:
+        description: Players with this permission can't get voted
         
         

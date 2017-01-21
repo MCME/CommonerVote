@@ -59,13 +59,14 @@ public class VoteReview extends AbstractCommand {
                                                        +PluginData.getCommonerGroup()+" ");
             List<FancyMessage> messages = new ArrayList<>();
             for(UUID id:promoteablePlayers) {
-                int score = PluginData.calculateScore(id);
+                double percentage = PluginData.calculateScore(id)*100;
                 String name = Bukkit.getOfflinePlayer(id).getName();
                 FancyMessage message = new FancyMessage(MessageType.INFO_NO_PREFIX,
                                                         PluginData.getMessageUtil())
                                                 .addFancy("- "+ChatColor.GREEN+name
                                                            +ChatColor.AQUA + " has "
-                                                           +ChatColor.GREEN+score+ChatColor.AQUA+" votes.",
+                                                           +ChatColor.GREEN+percentage+"%"
+                                                           +ChatColor.AQUA+" of needed votes.",
                                                         "/promote "+name,
                                                         ChatColor.YELLOW+"Click for promotion.");
                 messages.add(message);

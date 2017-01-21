@@ -18,12 +18,9 @@
  */
 package com.mcmiddleearth.commonerVote.command;
 
-import com.mcmiddleearth.commonerVote.data.Permission;
 import com.mcmiddleearth.commonerVote.data.PluginData;
-import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 
 /**
  *
@@ -34,7 +31,7 @@ public class VoteClear extends AbstractCommand {
     public VoteClear(String... permissionNodes) {
         super(1, true, permissionNodes);
         setShortDescription(": Clears all votes for a player.");
-        setUsageDescription("<playerName>: Clears all votes for <playerName>.");
+        setUsageDescription("<playerName>: Clears all votes for <playerName>. Also clears the players application.");
     }
     
     @Override

@@ -19,6 +19,7 @@
 package com.mcmiddleearth.commonerVote.command;
 
 import com.mcmiddleearth.commonerVote.data.PluginData;
+import java.util.logging.Logger;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
@@ -41,7 +42,12 @@ public class VoteConfig extends AbstractCommand {
             sendConfigInfoMessage(cs);
             return;
         }
-        if(PluginData.setConfig(args[0],args[1])) {
+        String message ="";
+        for(int i=1; i<args.length;i++) {
+            message = message + args[i]+" ";
+        }
+Logger.getGlobal().info("config "+message.replace("#", "§"));
+        if(PluginData.setConfig(args[0],message.replace("#", "§"))) {
             sendConfigChangedMessage(cs);
             sendConfigInfoMessage(cs);
         } else  {
@@ -58,7 +64,7 @@ public class VoteConfig extends AbstractCommand {
         ConfigurationSection config = PluginData.getConfig();
         for(String key: config.getKeys(false)) {
             PluginData.getMessageUtil().sendNoPrefixInfoMessage(cs, "- "
-                            +key+": "+ChatColor.GREEN+config.get(key));
+                            +key+": "+ChatColor.GREEN+config.get(key).toString().replace("§", "#"));
         }
     }
 

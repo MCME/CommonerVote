@@ -36,5 +36,6 @@ public final class Permission {
     public static final String SCORE_OTHER = "commonervote.score.other";
     public static final String APPLY = "commonervote.apply";
     public static final String CONFIG = "commonervote.config";
+    public static final String EXEMPT = "commonervote.exempt";
 
 }

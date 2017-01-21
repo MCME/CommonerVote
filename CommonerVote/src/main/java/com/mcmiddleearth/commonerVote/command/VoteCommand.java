@@ -60,6 +60,7 @@ public class VoteCommand extends AbstractCommand {
             reason = reason + args[i];
         }
         if(!PluginData.getAllowMultipleVoting() && PluginData.hasVoted((Player)cs, p)) {
+            PluginData.addVote((Player) cs, p, reason);
             sendAlreadyVotedMessage(cs);
         } else {
             PluginData.addVote((Player) cs, p, reason);
@@ -76,7 +77,7 @@ public class VoteCommand extends AbstractCommand {
     }
 
     private void sendAlreadyVotedMessage(CommandSender cs) {
-        PluginData.getMessageUtil().sendErrorMessage(cs, "You already voted for this player.");
+        PluginData.getMessageUtil().sendInfoMessage(cs, "You voted was updated.");
     }
 
     private void sendNoValidApplicant(CommandSender cs) {
