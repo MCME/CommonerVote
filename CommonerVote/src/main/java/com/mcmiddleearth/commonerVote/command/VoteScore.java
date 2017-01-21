@@ -52,12 +52,12 @@ public class VoteScore extends AbstractCommand {
                               PluginData.calculateScore(p.getUniqueId()));
     }
 
-    private void sendScoreMessage(CommandSender cs, int calculatedScore) {
-        PluginData.getMessageUtil().sendInfoMessage(cs, "You have got "+calculatedScore+" votes.");
+    private void sendScoreMessage(CommandSender cs, double calculatedScore) {
+        PluginData.getMessageUtil().sendInfoMessage(cs, "You have got "+(calculatedScore*100)+"% of needed votes.");
     }
 
-    private void sendOtherScoreMessage(CommandSender cs, String name, int calculatedScore) {
-        PluginData.getMessageUtil().sendInfoMessage(cs, name+" has got "+calculatedScore+" votes.");
+    private void sendOtherScoreMessage(CommandSender cs, String name, double calculatedScore) {
+        PluginData.getMessageUtil().sendInfoMessage(cs, name+" has got "+(calculatedScore*100)+"% of needed votes.");
     }
     
 }

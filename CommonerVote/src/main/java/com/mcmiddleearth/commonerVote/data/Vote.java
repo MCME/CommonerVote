@@ -18,11 +18,9 @@
  */
 package com.mcmiddleearth.commonerVote.data;
 
-import com.mcmiddleearth.pluginutil.NumericUtil;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.logging.Logger;
 import lombok.Getter;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.entity.Player;
@@ -37,7 +35,7 @@ public final class Vote implements ConfigurationSerializable {
     private final UUID voter;
     
     @Getter
-    private final int weight;
+    private final double weight;
     
     @Getter
     private final long timestamp;
@@ -45,14 +43,14 @@ public final class Vote implements ConfigurationSerializable {
     @Getter
     private final String reason;
     
-    public Vote(Player voter, int weight, String reason) { 
+    public Vote(Player voter, double weight, String reason) { 
         this.voter = voter.getUniqueId();
         this.weight = weight;
         timestamp = System.currentTimeMillis();
         this.reason = reason;
     }
     
-    private Vote(UUID voter, int weight, long timestamp, String reason) {
+    private Vote(UUID voter, double weight, long timestamp, String reason) {
         this.voter = voter;
         this.weight = weight;
         this.timestamp = timestamp;
@@ -80,21 +78,21 @@ public final class Vote implements ConfigurationSerializable {
     public static Vote deserialize(Map<String,Object> data) {
         Object id = data.get("voter");
         if(id==null || !(id instanceof String) || UUID.fromString((String)id)==null) {
-            return null;
+            id = UUID.randomUUID();
         }
         Object weight = data.get("weight");
-        if(weight==null|| !(weight instanceof Integer)) {
-            return null;
+        if(weight==null|| !((weight instanceof Double) || (weight instanceof Float))) {
+            weight=0;
         }
         Object time = data.get("timestamp");
         if(time==null|| !(time instanceof Long)) {
-            return null;
+            time = 0;
         }
         Object reason = data.get("reason");
         if(reason==null|| !(reason instanceof String)) {
-            return null;
+            reason="";
         }
-        Vote result = new Vote(UUID.fromString((String)id),(Integer)weight,(Long)time, (String) reason);
+        Vote result = new Vote(UUID.fromString((String)id),(Double) weight,(Long)time, (String) reason);
         return result;
     }
     

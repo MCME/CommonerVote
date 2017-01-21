@@ -54,7 +54,7 @@ public class VoteWithdraw extends AbstractCommand {
     }
     
     private void sendNoVoteFound(CommandSender cs) {
-        PluginData.getMessageUtil().sendInfoMessage(cs, "You havent not voted for this player before.");
+        PluginData.getMessageUtil().sendInfoMessage(cs, "You have not voted for this player before.");
     }
     
 }

@@ -20,7 +20,11 @@ package com.mcmiddleearth.commonerVote.data;
 
 import com.mcmiddleearth.commonerVote.CommonerVotePlugin;
 import com.mcmiddleearth.pluginutil.NumericUtil;
+import com.mcmiddleearth.pluginutil.message.FancyMessage;
+import com.mcmiddleearth.pluginutil.message.MessageType;
 import com.mcmiddleearth.pluginutil.message.MessageUtil;
+import com.mcmiddleearth.pluginutil.message.config.FancyMessageConfigUtil;
+import com.mcmiddleearth.pluginutil.message.config.MessageParseException;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -31,8 +35,8 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import lombok.Getter;
-import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -60,10 +64,15 @@ public class PluginData {
     
     @Getter
     private static String commonerGroup = "Commoner";
+    
+    @Getter
+    private static String promotionMessage = "§l§6Congrats!!! §eYou were promoted to §9§l "
+                           +commonerGroup+" §erank. Please remember the [Click=\"https://www.mcmiddleearth.com/help/terms\"]"
+                           +"[Hover=\"Click here\"]§9rules[/Hover][/Click]§e.";
 
     private static boolean allowMultipleVoting = false;
     
-    private static boolean automatedPromotion = false;
+    private static boolean automatedPromotion = true;
     
     private static boolean useXpBar = true;
     
@@ -130,6 +139,7 @@ public class PluginData {
         useXpBar=config.getBoolean("useXpBar", useXpBar);
         applicationNeeded=config.getBoolean("applicationNeeded", applicationNeeded);
         commonerGroup = config.getString("commonerGroupName", commonerGroup);
+        promotionMessage = config.getString("promotionMessage", promotionMessage);
     }
     
     public static void saveConfig() {
@@ -156,6 +166,7 @@ public class PluginData {
         config.set("useXpBar", useXpBar);
         config.set("applicationNeeded", applicationNeeded);
         config.set("commonerGroupName", commonerGroup);
+        config.set("promotionMessage", promotionMessage);
         return config;
     }
     
@@ -173,7 +184,7 @@ public class PluginData {
                 return false;
             }
         } else if(config.isBoolean(key)) {
-            config.set(key, Boolean.parseBoolean(value));
+            config.set(key, value.trim().equalsIgnoreCase("true"));
             saveConfig_internal(config);
             loadConfig();
             return true;
@@ -201,10 +212,12 @@ public class PluginData {
         } else if(votes==null) {
             return;
         }
+        double newWeight = (getVotingWeight(voter)*1.0)/neededVotes;
         if(!allowMultipleVoting) {
+            newWeight = Math.max(newWeight, getMaxWeight(voter,recipient));
             withdrawVote_internal(voter, recipient);
         }
-        Vote vote = new Vote(voter, getVotingWeight(voter), reason);
+        Vote vote = new Vote(voter, newWeight, reason);
         votes.add(vote);
         promotePlayer(recipient);
         saveData();
@@ -219,9 +232,11 @@ public class PluginData {
  
     public static boolean hasVoted(Player voter, OfflinePlayer recipient) {
         List<Vote> votes = playerVotes.get(recipient.getUniqueId());
-        for(Vote vote: votes) {
-            if(vote.getVoter().equals(voter.getUniqueId())) {
-                return true;
+        if(votes!=null) {
+            for(Vote vote: votes) {
+                if(vote.getVoter().equals(voter.getUniqueId())) {
+                    return true;
+                }
             }
         }
         return false;
@@ -230,7 +245,7 @@ public class PluginData {
     public static void promotePlayer(OfflinePlayer player) {
         if(automatedPromotion
                 && player.isOnline()
-                && calculateScore(player.getUniqueId())>=neededVotes
+                && calculateScore(player.getUniqueId())>=0.9999
                 && !player.getPlayer().hasPermission(getCommonerPerm())) {
             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "pex user "+player.getName()+" group set "+commonerGroup.toLowerCase());
             sendPromotionMessage(player.getPlayer());
@@ -241,6 +256,18 @@ public class PluginData {
         }
 
     }
+    
+    private static double getMaxWeight(Player voter, OfflinePlayer recipient) {
+        List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
+        double result = 0;
+        if(votes!=null) {
+            for(Vote vote: votes) {
+                result = Math.max(result, vote.getWeight());
+            }
+        }
+        return result;
+    }
+    
     private static void withdrawVote_internal(Player voter, OfflinePlayer recipient) {
         List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
         if(votes!=null) {
@@ -263,17 +290,17 @@ public class PluginData {
     public static void updateXpBar(OfflinePlayer player) {
         if(useXpBar && player.isOnline()) {
             player.getPlayer().setLevel(0);
-            int score = calculateScore(player.getUniqueId());
-            player.getPlayer().setExp(Math.min(((float)score)/neededVotes,1));
+            double score = calculateScore(player.getUniqueId());
+            player.getPlayer().setExp(Math.min((float)score,1));
         }
     }
     
-    public static int calculateScore(UUID player) {
+    public static double calculateScore(UUID player) {
         List<Vote> votes = playerVotes.get(player);
         if(votes==null) {
             return 0;
         } else {
-            int result=0;
+            double result=0;
             for(Vote vote: votes) {
                 if(vote.isValid()) {
                     result+=vote.getWeight();
@@ -292,13 +319,13 @@ public class PluginData {
     }
     
     public static String getCommonerPerm() {
-        return "group."+commonerGroup.toLowerCase();
+        return Permission.EXEMPT;
     }
     
     public static List<UUID> getPromoteablePlayers() {
         List<UUID> result = new ArrayList<>();
         for(UUID id:playerVotes.keySet()) {
-            if(calculateScore(id)>=neededVotes) {
+            if(calculateScore(id)>=0.9999) {
                 result.add(id);
             }
         }
@@ -328,6 +355,9 @@ public class PluginData {
     }
     
     private static void clearOldVotes(List<Vote> votes) {
+        if(votes==null) {
+            return;
+        }
         List<Vote> old = new ArrayList<>();
         for(Vote vote:votes) {
             if(!vote.isValid()) {
@@ -338,10 +368,20 @@ public class PluginData {
     }
     
     public static void sendPromotionMessage(Player player) {
-        messageUtil.sendInfoMessage(player.getPlayer(),
-                            ""+ChatColor.GOLD+ChatColor.BOLD+"Congrats!!! "
-                           +ChatColor.YELLOW+"You were promoted to "
-                           +ChatColor.GOLD+commonerGroup+ChatColor.YELLOW+" rank.");
+        List<String> message = new ArrayList<>();
+        message.add(promotionMessage);
+        try {
+            FancyMessageConfigUtil.addFromStringList(new FancyMessage(MessageType.WHITE,
+                    PluginData.getMessageUtil()),
+                    message)
+                    .setRunDirect()
+                    .send(player);
+        } catch (MessageParseException ex) {
+            messageUtil.sendInfoMessage(player.getPlayer(),
+                    ""+ChatColor.GOLD+ChatColor.BOLD+"Congrats!!! "
+                    +ChatColor.YELLOW+"You were promoted to "
+                    +ChatColor.BLUE+ChatColor.BOLD+commonerGroup+ChatColor.YELLOW+" rank.");
+         }
     }
             
     public static boolean getAllowMultipleVoting() {
