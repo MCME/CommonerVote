@@ -77,7 +77,7 @@ public class VoteCommand extends AbstractCommand {
     }
 
     private void sendAlreadyVotedMessage(CommandSender cs) {
-        PluginData.getMessageUtil().sendInfoMessage(cs, "You voted was updated.");
+        PluginData.getMessageUtil().sendInfoMessage(cs, "Your vote was updated.");
     }
 
     private void sendNoValidApplicant(CommandSender cs) {
