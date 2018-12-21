@@ -51,6 +51,7 @@ public class PluginData {
     @Getter
     private final static MessageUtil messageUtil = new MessageUtil();
     
+    @Getter
     private final static Map<UUID,List<Vote>> playerVotes = new HashMap<>();
     
     @Getter
@@ -73,6 +74,8 @@ public class PluginData {
     private static boolean allowMultipleVoting = false;
     
     private static boolean automatedPromotion = true;
+    
+    private static String promotionCommand = "pex user <player> group set <group>";
     
     private static boolean useXpBar = true;
     
@@ -140,6 +143,9 @@ public class PluginData {
         applicationNeeded=config.getBoolean("applicationNeeded", applicationNeeded);
         commonerGroup = config.getString("commonerGroupName", commonerGroup);
         promotionMessage = config.getString("promotionMessage", promotionMessage);
+        if(config.contains("promotionCommand")) {
+            promotionCommand = config.getString("promotionCommand", promotionCommand);
+        }
     }
     
     public static void saveConfig() {
@@ -167,6 +173,7 @@ public class PluginData {
         config.set("applicationNeeded", applicationNeeded);
         config.set("commonerGroupName", commonerGroup);
         config.set("promotionMessage", promotionMessage);
+        config.set("promotionCommand", promotionCommand);
         return config;
     }
     
@@ -247,12 +254,16 @@ public class PluginData {
                 && player.isOnline()
                 && calculateScore(player.getUniqueId())>=0.9999
                 && !player.getPlayer().hasPermission(getCommonerPerm())) {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "pex user "+player.getName()+" group set "+commonerGroup.toLowerCase());
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), promotionCommand.replace("<player>", player.getName()).replace("<group>", commonerGroup));//"pex user "+player.getName()+" group set "+commonerGroup.toLowerCase());
             sendPromotionMessage(player.getPlayer());
             player.getPlayer().recalculatePermissions();
-            if(player.getPlayer().hasPermission(getCommonerPerm())) {
+            player.getPlayer().setLevel(0);
+            player.getPlayer().setExp(0);
+
+            //Keep votes for future /vote review <player> -voter
+            /*if(player.getPlayer().hasPermission(getCommonerPerm())) {
                 clearVotes(player);
-            }
+            }*/
         }
 
     }
@@ -288,10 +299,10 @@ public class PluginData {
     }
     
     public static void updateXpBar(OfflinePlayer player) {
-        if(useXpBar && player.isOnline()) {
-            player.getPlayer().setLevel(0);
-            double score = calculateScore(player.getUniqueId());
-            player.getPlayer().setExp(Math.min((float)score,1));
+        if(useXpBar && player.isOnline() && !player.getPlayer().hasPermission(getCommonerPerm())) {
+                player.getPlayer().setLevel(0);
+                double score = calculateScore(player.getUniqueId());
+                player.getPlayer().setExp(Math.min((float)score,1));
         }
     }
     
@@ -345,9 +356,10 @@ public class PluginData {
         for(UUID id: playerVotes.keySet()) {
             clearOldVotes(playerVotes.get(id));
             OfflinePlayer player = Bukkit.getOfflinePlayer(id);
-            if(player.isOnline() && player.getPlayer().hasPermission(getCommonerPerm())) {
+            //Keep votes for future /vote review <player> -voter
+            /*if(player.isOnline() && player.getPlayer().hasPermission(getCommonerPerm())) {
                 invalidVotes.add(id);
-            }
+            }*/
         }
         for(UUID id: invalidVotes) {
             playerVotes.remove(id);

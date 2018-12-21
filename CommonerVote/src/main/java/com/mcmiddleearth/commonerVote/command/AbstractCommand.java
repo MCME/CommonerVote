@@ -90,6 +90,7 @@ public abstract class AbstractCommand {
     protected OfflinePlayer getOfflinePlayer(CommandSender cs, String playerName) {
         List<Player> player = Bukkit.matchPlayer(playerName);
         if(player.size()>1) {
+            sendMoreThanOnePlayerFoundMessage(cs);
             return null;
         } else if(player.size()==1) {
             return player.get(0);

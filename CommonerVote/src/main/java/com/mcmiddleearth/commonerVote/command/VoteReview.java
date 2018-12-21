@@ -25,9 +25,10 @@ import com.mcmiddleearth.pluginutil.message.FancyMessage;
 import com.mcmiddleearth.pluginutil.message.MessageType;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -48,14 +49,15 @@ public class VoteReview extends AbstractCommand {
     protected void execute(CommandSender cs, String... args) {
         PluginData.clearOldVotes();
         if(args.length==0 || NumericUtil.isInt(args[0])) {
-            List<UUID> promoteablePlayers = PluginData.getPromoteablePlayers();
+            List<UUID> promoteablePlayers = new ArrayList<>();//getPromoteablePlayers();
+            promoteablePlayers.addAll(PluginData.getPlayerVotes().keySet());
             int page = 1;
-            if(args.length>1 && NumericUtil.isInt(args[1])) {
-                page = NumericUtil.getInt(args[1]);
+            if(args.length>0 && NumericUtil.isInt(args[0])) {
+                page = NumericUtil.getInt(args[0]);
             }
             FancyMessage header = new FancyMessage(MessageType.INFO,
                                                     PluginData.getMessageUtil())
-                                            .addSimple("Players with enough votes for  "
+                                            .addSimple("Players with valid votes for  "
                                                        +PluginData.getCommonerGroup()+" ");
             List<FancyMessage> messages = new ArrayList<>();
             for(UUID id:promoteablePlayers) {
@@ -67,55 +69,97 @@ public class VoteReview extends AbstractCommand {
                                                            +ChatColor.AQUA + " has "
                                                            +ChatColor.GREEN+percentage+"%"
                                                            +ChatColor.AQUA+" of needed votes.",
-                                                        "/promote "+name,
-                                                        ChatColor.YELLOW+"Click for promotion.");
+                                                        "/vote review "+name,
+                                                        ChatColor.YELLOW+"Click for voter names.");
                 messages.add(message);
             }
             PluginData.getMessageUtil().sendFancyListMessage((Player)cs, header, messages,
                                                              "/vote review", page);
             return;
-        }
+        } 
         OfflinePlayer p = getOfflinePlayer(cs,args[0]);
         if(p==null) {
             return;
         }
-        if(PluginData.isApplicationNeeded() && !PluginData.hasApplied(p)) {
-            sendNotAppliedError(cs);
-            return;
-        }
-        List<Vote> votes = PluginData.getVotes(p);
-        if(votes==null) {
-            sendNoVotesMessage(cs);
-            return;
-        }
-        int page = 1;
-        if(args.length>1 && NumericUtil.isInt(args[1])) {
-            page = NumericUtil.getInt(args[1]);
-        }
-        FancyMessage header = new FancyMessage(MessageType.INFO,
-                                                PluginData.getMessageUtil())
-                                        .addSimple(PluginData.getCommonerGroup()+" votes for "+p.getName());
-        List<FancyMessage> messages = new ArrayList<>();
-        for(Vote vote:votes) {
-            int timeAgo = (int)((System.currentTimeMillis()-vote.getTimestamp())/1000/3600/24);
-            String voter = Bukkit.getOfflinePlayer(vote.getVoter()).getName();
-            String reason = vote.getReason();
-            FancyMessage message = new FancyMessage(MessageType.INFO_NO_PREFIX,
-                                                    PluginData.getMessageUtil())
-                                            .addSimple("- "+ChatColor.GREEN+timeAgo
-                                                       +ChatColor.AQUA + " days ago from "
-                                                       +ChatColor.GREEN+voter);
-            if(!reason.equals("")) {
-                message.addSimple(". Reason: "+reason);
+        if(args.length>1 && args[1].equalsIgnoreCase("-voter")) {
+            Map<UUID, List<Vote>> votes = PluginData.getPlayerVotes();
+            int page = 1;
+            if(args.length>2 && NumericUtil.isInt(args[2])) {
+                page = NumericUtil.getInt(args[2]);
             }
-            messages.add(message);
+            FancyMessage header = new FancyMessage(MessageType.INFO,
+                                                    PluginData.getMessageUtil())
+                                            .addSimple(PluginData.getCommonerGroup()+" votes from "+p.getName());
+            List<FancyMessage> messages = new ArrayList<>();
+            int counter = 0;
+            for(UUID recieverUuid:votes.keySet()) {
+                String reciever = Bukkit.getOfflinePlayer(recieverUuid).getName();
+                for(Vote vote: votes.get(recieverUuid)) {
+                    if(vote.getVoter().equals(p.getUniqueId())) {
+                        int timeAgo = (int)((System.currentTimeMillis()-vote.getTimestamp())/1000/3600/24);
+                        String reason = vote.getReason();
+                        FancyMessage message = new FancyMessage(MessageType.INFO_NO_PREFIX,
+                                                                PluginData.getMessageUtil())
+                                                        .addSimple("- "+ChatColor.GREEN+timeAgo
+                                                                   +ChatColor.AQUA + " days ago for "
+                                                                   +ChatColor.GREEN+reciever);
+                        if(!reason.equals("")) {
+                            message.addSimple(". Reason: "+reason);
+                        }
+                        messages.add(message);
+                        counter++;
+                    }
+                }
+            }
+            if(counter==0) {
+                sendNotVotedMessage(cs);
+                return;
+            }
+            PluginData.getMessageUtil().sendFancyListMessage((Player)cs, header, messages,
+                                                             "/vote review "+p.getName()+" -voter ", page);
+        } else {
+            if(PluginData.isApplicationNeeded() && !PluginData.hasApplied(p)) {
+                sendNotAppliedError(cs);
+                return;
+            }
+            List<Vote> votes = PluginData.getVotes(p);
+            if(votes==null) {
+                sendNoVotesMessage(cs);
+                return;
+            }
+            int page = 1;
+            if(args.length>1 && NumericUtil.isInt(args[1])) {
+                page = NumericUtil.getInt(args[1]);
+            }
+            FancyMessage header = new FancyMessage(MessageType.INFO,
+                                                    PluginData.getMessageUtil())
+                                            .addSimple(PluginData.getCommonerGroup()+" votes for "+p.getName());
+            List<FancyMessage> messages = new ArrayList<>();
+            for(Vote vote:votes) {
+                int timeAgo = (int)((System.currentTimeMillis()-vote.getTimestamp())/1000/3600/24);
+                String voter = Bukkit.getOfflinePlayer(vote.getVoter()).getName();
+                String reason = vote.getReason();
+                FancyMessage message = new FancyMessage(MessageType.INFO_NO_PREFIX,
+                                                        PluginData.getMessageUtil())
+                                                .addSimple("- "+ChatColor.GREEN+timeAgo
+                                                           +ChatColor.AQUA + " days ago from "
+                                                           +ChatColor.GREEN+voter);
+                if(!reason.equals("")) {
+                    message.addSimple(". Reason: "+reason);
+                }
+                messages.add(message);
+            }
+            PluginData.getMessageUtil().sendFancyListMessage((Player)cs, header, messages,
+                                                             "/vote review "+p.getName()+" ", page);
         }
-        PluginData.getMessageUtil().sendFancyListMessage((Player)cs, header, messages,
-                                                         "/vote review "+p.getName()+" ", page);
     }
     
     private void sendNoVotesMessage(CommandSender cs) {
         PluginData.getMessageUtil().sendInfoMessage(cs,"This player has no votes yet.");
+    }
+    
+    private void sendNotVotedMessage(CommandSender cs) {
+        PluginData.getMessageUtil().sendInfoMessage(cs,"This player has not voted.");
     }
     
 }
