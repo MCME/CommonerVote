@@ -40,7 +40,10 @@ public class CommonerVotePlugin extends JavaPlugin {
         pluginInstance = this;
         ConfigurationSerialization.registerClass(Vote.class);
         PluginData.loadConfig();
-        PluginData.loadData();
+        //PluginData.loadData();
+        if(PluginData.isUseBungee()) {
+            
+        }
         getServer().getPluginManager().registerEvents(new PlayerListener(), this);
         getCommand("vote").setExecutor(new VoteCommandExecutor());
         getLogger().info("Enabled!");

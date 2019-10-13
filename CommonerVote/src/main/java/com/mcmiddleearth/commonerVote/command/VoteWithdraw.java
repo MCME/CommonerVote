@@ -41,12 +41,14 @@ public class VoteWithdraw extends AbstractCommand {
         if(p==null) {
             return;
         }
-        if(PluginData.hasVoted((Player)cs, p)) {
-            PluginData.withdrawVote((Player)cs, p);
-            sendVoteWithdrawn(cs);
-        } else {
-            sendNoVoteFound(cs);
-        }
+        PluginData.hasVoted((Player)cs, p, voted -> {
+            if(voted) {
+                PluginData.withdrawVote((Player)cs, p);
+                sendVoteWithdrawn(cs);
+            } else {
+                sendNoVoteFound(cs);
+            }
+        }, error -> PluginData.getMessageUtil().sendErrorMessage(cs, error));
     }
 
     private void sendVoteWithdrawn(CommandSender cs) {

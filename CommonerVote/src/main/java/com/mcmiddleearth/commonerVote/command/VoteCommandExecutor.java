@@ -23,7 +23,6 @@ import com.mcmiddleearth.commonerVote.data.PluginData;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.logging.Logger;
 import lombok.Getter;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

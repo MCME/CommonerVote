@@ -41,15 +41,18 @@ public class VoteScore extends AbstractCommand {
         PluginData.clearOldVotes();
         Player player = (Player) cs;
         if(!player.hasPermission(Permission.SCORE_OTHER) || args.length==0) {
-            sendScoreMessage(cs,PluginData.calculateScore(player.getUniqueId()));
+            PluginData.getScore(player.getUniqueId(), score -> sendScoreMessage(cs,score),
+                                error -> PluginData.getMessageUtil().sendErrorMessage(cs, error));
             return;
         }
         OfflinePlayer p = getOfflinePlayer(cs,args[0]);
         if(p==null) {
             return;
         }
-        sendOtherScoreMessage(cs, args[0],
-                              PluginData.calculateScore(p.getUniqueId()));
+        
+        PluginData.getScore(p.getUniqueId(), 
+                            score -> sendOtherScoreMessage(cs, args[0],score),
+                            error -> PluginData.getMessageUtil().sendErrorMessage(cs, error));
     }
 
     private void sendScoreMessage(CommandSender cs, double calculatedScore) {

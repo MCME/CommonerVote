@@ -18,6 +18,9 @@
  */
 package com.mcmiddleearth.commonerVote.data;
 
+import com.google.common.collect.Iterables;
+import com.google.common.io.ByteArrayDataOutput;
+import com.google.common.io.ByteStreams;
 import com.mcmiddleearth.commonerVote.CommonerVotePlugin;
 import com.mcmiddleearth.pluginutil.NumericUtil;
 import com.mcmiddleearth.pluginutil.message.FancyMessage;
@@ -28,10 +31,13 @@ import com.mcmiddleearth.pluginutil.message.config.MessageParseException;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import lombok.Getter;
@@ -41,6 +47,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
 
 /**
  *
@@ -52,9 +59,6 @@ public class PluginData {
     private final static MessageUtil messageUtil = new MessageUtil();
     
     @Getter
-    private final static Map<UUID,List<Vote>> playerVotes = new HashMap<>();
-    
-    @Getter
     private static long storageTime = ((long)30)*24*3600*1000; //one month
     
     private static int neededVotes = 16;
@@ -63,10 +67,14 @@ public class PluginData {
     
     private static int otherVoteWeight = 1;
     
+    private static boolean useDatabase = false;
+    
+    @Getter
+    private static boolean useBungee = false;
+    
     @Getter
     private static String commonerGroup = "Commoner";
     
-    @Getter
     private static String promotionMessage = "§l§6Congrats!!! §eYou were promoted to §9§l "
                            +commonerGroup+" §erank. Please remember the [Click=\"https://www.mcmiddleearth.com/help/terms\"]"
                            +"[Hover=\"Click here\"]§9rules[/Hover][/Click]§e.";
@@ -87,39 +95,19 @@ public class PluginData {
     private static final File dataFile = new File(CommonerVotePlugin.getPluginInstance()
                                                 .getDataFolder(),"votes.yml");
     
+    private static VoteStorage voteStorage;
+    
+    private static long storageTimeout = 4000;
+    
+    private static final String internalErrorMessage = "An internal error occured!";
+    
     static {
         messageUtil.setPluginName("Vote");
     }
     
-    public static void loadData() {
-        playerVotes.clear();
-        YamlConfiguration config = new YamlConfiguration();
-        try {
-            config.load(dataFile);
-        } catch (IOException | InvalidConfigurationException ex) {
-            Logger.getLogger(PluginData.class.getName()).log(Level.WARNING, "No voting data file found.", ex);
-            return;
-        }
-        for(String id: config.getKeys(false)) {
-            List<Vote> votes = (List<Vote>) config.getList(id);
-            playerVotes.put(UUID.fromString(id), votes);
-        }
-    }
-    
-    public static void saveData() {
-        YamlConfiguration config = new YamlConfiguration();
-        for(UUID player: playerVotes.keySet()) {
-            //ConfigurationSection section = config.createSection(player.toString());
-            List<Vote> votes = playerVotes.get(player);
-            clearOldVotes(votes);
-            config.set(player.toString(), votes);
-            }
-        try {
-            config.save(dataFile);
-        } catch (IOException ex) {
-            Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-        }
-    }
+    /*public static void loadData() {
+        voteStorage.load();
+    }*/
     
     public static void loadConfig() {
         YamlConfiguration config = new YamlConfiguration();
@@ -145,6 +133,13 @@ public class PluginData {
         promotionMessage = config.getString("promotionMessage", promotionMessage);
         if(config.contains("promotionCommand")) {
             promotionCommand = config.getString("promotionCommand", promotionCommand);
+        }
+        useBungee = config.getBoolean("useBungee", useBungee);
+        useDatabase = config.getBoolean("useDatabase", useDatabase);
+        if(useDatabase) {
+            voteStorage = new DatabaseVoteStorage(config.getConfigurationSection("database"));
+        } else {
+            voteStorage = new FileVoteStorage(dataFile);
         }
     }
     
@@ -174,6 +169,8 @@ public class PluginData {
         config.set("commonerGroupName", commonerGroup);
         config.set("promotionMessage", promotionMessage);
         config.set("promotionCommand", promotionCommand);
+        config.set("useDatabase", useDatabase);
+        config.set("useBungee", useBungee);
         return config;
     }
     
@@ -203,56 +200,168 @@ public class PluginData {
         }
     }
     
+    public static void getPlayerVotes(Consumer<Map<UUID,List<Vote>>> success,
+                                      Consumer<String> fail) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    success.accept(voteStorage.getPlayerVotes()
+                            .get(storageTimeout, TimeUnit.MILLISECONDS));
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    fail.accept(internalErrorMessage);
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
+    }
+    
     public static void apply(OfflinePlayer applicant) {
-        List<Vote> votes = playerVotes.get(applicant.getUniqueId());        
-        if(votes==null) {
-            votes = new ArrayList<>();
-            playerVotes.put(applicant.getUniqueId(), votes);
-        }
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                voteStorage.apply(applicant);
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
     
     public static void addVote(Player voter, OfflinePlayer recipient, String reason) {
-        List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
-        if(!applicationNeeded) {
-           apply(recipient);
-           votes = playerVotes.get(recipient.getUniqueId());
-        } else if(votes==null) {
-            return;
-        }
-        double newWeight = (getVotingWeight(voter)*1.0)/neededVotes;
-        if(!allowMultipleVoting) {
-            newWeight = Math.max(newWeight, getMaxWeight(voter,recipient));
-            withdrawVote_internal(voter, recipient);
-        }
-        Vote vote = new Vote(voter, newWeight, reason);
-        votes.add(vote);
-        promotePlayer(recipient);
-        saveData();
-        updateXpBar(recipient);
+        //voteStorage.addVote(voter, recipient, reason);
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    List<Vote> votes = voteStorage
+                            .getPlayerVotes(recipient.getUniqueId())
+                            .get(storageTimeout, TimeUnit.MILLISECONDS);
+                    if(votes == null && !applicationNeeded) {
+                        voteStorage.apply(recipient);
+                        //votes = voteStorage.getPlayerVotes(recipient.getUniqueId());
+                    } else if(votes==null) {
+                        return;
+                    }
+                    double newWeight = (getVotingWeight(voter)*1.0)/neededVotes;
+                    boolean withdrawPrevious = false;
+                    if(!allowMultipleVoting) {
+                        newWeight = Math.max(newWeight, 
+                                    voteStorage.getMaxWeight(voter, recipient)
+                                               .get(storageTimeout, TimeUnit.MILLISECONDS));
+                        //withdrawVote_internal(voter, recipient);
+                        withdrawPrevious = true;
+                    }
+                    Vote vote = new Vote(voter, newWeight, reason);
+                    voteStorage.addVote(recipient, vote, withdrawPrevious);
+                    double score = calculateScore(recipient.getUniqueId());
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            promotePlayer(recipient,score);
+                            //voteStorage.save();
+                            updateXpBar(recipient,score);
+                        }
+                    }.runTask(CommonerVotePlugin.getPluginInstance());
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    messageUtil.sendErrorMessage(voter, internalErrorMessage);
+                }
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
     
     public static void withdrawVote(Player voter, OfflinePlayer recipient) {
-        withdrawVote_internal(voter, recipient);
-        saveData();
-        updateXpBar(recipient);
-    }
- 
-    public static boolean hasVoted(Player voter, OfflinePlayer recipient) {
-        List<Vote> votes = playerVotes.get(recipient.getUniqueId());
-        if(votes!=null) {
-            for(Vote vote: votes) {
-                if(vote.getVoter().equals(voter.getUniqueId())) {
-                    return true;
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    voteStorage.withdrawVote(voter, recipient);
+                    double score = calculateScore(recipient.getUniqueId());
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            updateXpBar(recipient, score);
+                        }
+                    }.runTask(CommonerVotePlugin.getPluginInstance());
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    messageUtil.sendErrorMessage(voter, internalErrorMessage);
                 }
             }
-        }
-        return false;
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
+    }
+ 
+    public static void hasVoted(Player voter, OfflinePlayer recipient,
+                                Consumer<Boolean> success,
+                                Consumer<String> fail) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    success.accept(voteStorage.hasVoted(voter, recipient)
+                            .get(storageTimeout, TimeUnit.MILLISECONDS));
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    fail.accept(internalErrorMessage);
+                }
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
     
-    public static void promotePlayer(OfflinePlayer player) {
+    public static void getScore(UUID player, Consumer<Double> success, Consumer<String> fail) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    success.accept(calculateScore(player));
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    fail.accept(internalErrorMessage);
+                }
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
+    }
+    
+    private static double calculateScore(UUID player) 
+            throws InterruptedException, ExecutionException, TimeoutException {
+        List<Vote> votes = voteStorage.getPlayerVotes(player).get(storageTimeout, TimeUnit.MILLISECONDS);
+        return calculateScore(votes);
+    }
+    
+    public static double calculateScore(List<Vote> votes) {
+        if(votes==null) {
+            return 0;
+        } else {
+            double result=0;
+            for(Vote vote: votes) {
+                if(vote.isValid()) {
+                    result+=vote.getWeight();
+                }
+            }
+            return result;
+        }
+    }
+    
+    private static void updateXpBar(OfflinePlayer player, double score) {
+        if(useXpBar && player.isOnline() && !player.getPlayer().hasPermission(getCommonerPerm())) {
+                player.getPlayer().setLevel(0);
+                //double score = calculateScore(player.getUniqueId());
+                player.getPlayer().setExp(Math.min((float)score,1));
+        }
+    }
+    
+    private static void promotePlayer(OfflinePlayer player, double score) {
         if(automatedPromotion
                 && player.isOnline()
-                && calculateScore(player.getUniqueId())>=0.9999
+                && score >=0.9999 //calculateScore(player.getUniqueId())>=0.9999
                 && !player.getPlayer().hasPermission(getCommonerPerm())) {
             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), promotionCommand.replace("<player>", player.getName()).replace("<group>", commonerGroup));//"pex user "+player.getName()+" group set "+commonerGroup.toLowerCase());
             sendPromotionMessage(player.getPlayer());
@@ -268,80 +377,121 @@ public class PluginData {
 
     }
     
-    private static double getMaxWeight(Player voter, OfflinePlayer recipient) {
-        List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
-        double result = 0;
-        if(votes!=null) {
-            for(Vote vote: votes) {
-                result = Math.max(result, vote.getWeight());
-            }
-        }
-        return result;
-    }
-    
-    private static void withdrawVote_internal(Player voter, OfflinePlayer recipient) {
-        List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
-        if(votes!=null) {
-            List<Vote> removalList = new ArrayList<>();
-            for(Vote vote: votes) {
-                if(vote.getVoter().equals(voter.getUniqueId())) {
-                    removalList.add(vote);
+    /*private static void getMaxWeight(Player voter, OfflinePlayer recipient,
+                                     Consumer<Double> success, 
+                                     Consumer<String> fail) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    success.accept(voteStorage.getMaxWeight(voter, recipient)
+                            .get(storageTimeout, TimeUnit.MILLISECONDS));
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    fail.accept(internalErrorMessage);
                 }
             }
-            votes.removeAll(removalList);
-        }
-    }
-
-    public static void clearVotes(OfflinePlayer player) {
-        playerVotes.remove(player.getUniqueId());
-        saveData();
-        updateXpBar(player);
-    }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
+    }*/
     
-    public static void updateXpBar(OfflinePlayer player) {
-        if(useXpBar && player.isOnline() && !player.getPlayer().hasPermission(getCommonerPerm())) {
-                player.getPlayer().setLevel(0);
-                double score = calculateScore(player.getUniqueId());
-                player.getPlayer().setExp(Math.min((float)score,1));
-        }
-    }
-    
-    public static double calculateScore(UUID player) {
-        List<Vote> votes = playerVotes.get(player);
-        if(votes==null) {
-            return 0;
-        } else {
-            double result=0;
-            for(Vote vote: votes) {
-                if(vote.isValid()) {
-                    result+=vote.getWeight();
+    public static void clearVotes(OfflinePlayer player, Consumer<String> fail) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    voteStorage.clearVotes(player);
+                    double score = calculateScore(player.getUniqueId());
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            updateXpBar(player, score);
+                        }
+                    }.runTask(CommonerVotePlugin.getPluginInstance());
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    fail.accept(internalErrorMessage);
                 }
             }
-            return result;
-        }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
     
-    public static List<Vote> getVotes(OfflinePlayer player) {
-        return playerVotes.get(player.getUniqueId());
+    public static void getVotes(OfflinePlayer player,
+                                Consumer<List<Vote>> success,
+                                Consumer<String> fail) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    success.accept(voteStorage.getPlayerVotes(player.getUniqueId())
+                            .get(storageTimeout, TimeUnit.MILLISECONDS));
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    fail.accept(internalErrorMessage);
+                }
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
     
-    public static boolean hasApplied(OfflinePlayer player) {
-        return playerVotes.containsKey(player.getUniqueId());
+    public static void hasApplied(OfflinePlayer player,
+                                Consumer<Boolean> success,
+                                Consumer<String> fail) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    success.accept(voteStorage.hasApplied(player)
+                            .get(storageTimeout, TimeUnit.MILLISECONDS));
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                    fail.accept(internalErrorMessage);
+                }
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
+    }
+    
+    public static void checkPromotion(Player player) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    double score = calculateScore(player.getUniqueId());
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            promotePlayer(player,score);
+                            updateXpBar(player,score);
+                        }
+                    }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (ExecutionException | TimeoutException ex) {
+                    messageUtil.sendErrorMessage(player, internalErrorMessage);
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
+        }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
     
     public static String getCommonerPerm() {
         return Permission.EXEMPT;
     }
     
-    public static List<UUID> getPromoteablePlayers() {
+    /*public static List<UUID> getPromoteablePlayers() {
         List<UUID> result = new ArrayList<>();
-        for(UUID id:playerVotes.keySet()) {
-            if(calculateScore(id)>=0.9999) {
+        for(UUID id:voteStorage.getPlayers()) {//playerVotes.keySet()) {
+            if(calculateScore(id)<0.9999) {
                 result.add(id);
             }
         }
         return result;
-    }
+    }*/
     
     private static int getVotingWeight(Player player) {
         if(player.hasPermission(Permission.STAFF)) {
@@ -352,51 +502,46 @@ public class PluginData {
     }
     
     public static void clearOldVotes() {
-        List<UUID> invalidVotes = new ArrayList<>();
-        for(UUID id: playerVotes.keySet()) {
-            clearOldVotes(playerVotes.get(id));
-            OfflinePlayer player = Bukkit.getOfflinePlayer(id);
-            //Keep votes for future /vote review <player> -voter
-            /*if(player.isOnline() && player.getPlayer().hasPermission(getCommonerPerm())) {
-                invalidVotes.add(id);
-            }*/
-        }
-        for(UUID id: invalidVotes) {
-            playerVotes.remove(id);
-        }
-    }
-    
-    private static void clearOldVotes(List<Vote> votes) {
-        if(votes==null) {
-            return;
-        }
-        List<Vote> old = new ArrayList<>();
-        for(Vote vote:votes) {
-            if(!vote.isValid()) {
-                old.add(vote);
-            }
-        }
-        votes.removeAll(old);
+        voteStorage.clearOldVotes();
     }
     
     public static void sendPromotionMessage(Player player) {
-        List<String> message = new ArrayList<>();
-        message.add(promotionMessage);
-        try {
-            FancyMessageConfigUtil.addFromStringList(new FancyMessage(MessageType.WHITE,
-                    PluginData.getMessageUtil()),
-                    message)
-                    .setRunDirect()
-                    .send(player);
-        } catch (MessageParseException ex) {
-            messageUtil.sendInfoMessage(player.getPlayer(),
-                    ""+ChatColor.GOLD+ChatColor.BOLD+"Congrats!!! "
-                    +ChatColor.YELLOW+"You were promoted to "
-                    +ChatColor.BLUE+ChatColor.BOLD+commonerGroup+ChatColor.YELLOW+" rank.");
-         }
+        if(!useBungee) {
+            List<String> message = new ArrayList<>();
+            message.add(promotionMessage);
+            try {
+                FancyMessageConfigUtil.addFromStringList(new FancyMessage(MessageType.WHITE,
+                        PluginData.getMessageUtil()),
+                        message)
+                        .setRunDirect()
+                        .send(player);
+            } catch (MessageParseException ex) {
+                messageUtil.sendInfoMessage(player.getPlayer(),
+                        ""+ChatColor.GOLD+ChatColor.BOLD+"Congrats!!! "
+                        +ChatColor.YELLOW+"You were promoted to "
+                        +ChatColor.BLUE+ChatColor.BOLD+commonerGroup+ChatColor.YELLOW+" rank.");
+             }
+        } else {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    ByteArrayDataOutput out = ByteStreams.newDataOutput();
+                    out.writeUTF("Message");
+                    out.writeUTF(player.getName());
+                    out.writeUTF(promotionMessage);
+                    Player sender = Iterables.getFirst(Bukkit.getOnlinePlayers(), null);
+
+                    if(sender!=null) {
+                        sender.sendPluginMessage(CommonerVotePlugin.getPluginInstance(), 
+                                                 "BungeeCord", out.toByteArray());
+                    }
+                }
+            }.runTaskLater(CommonerVotePlugin.getPluginInstance(), 5);
+        }
     }
-            
+    
     public static boolean getAllowMultipleVoting() {
         return allowMultipleVoting;
     }
+    
 }
