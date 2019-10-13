@@ -27,13 +27,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import lombok.Getter;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.entity.Player;
 import org.mariadb.jdbc.MySQLDataSource;
 
@@ -66,19 +68,25 @@ public class DatabaseVoteStorage implements VoteStorage{
     @Getter
     private boolean connected = false;
     
+    private ExecutorService executor = Executors.newSingleThreadExecutor();
+    
     public DatabaseVoteStorage(ConfigurationSection config) {
+        if(config==null) {
+            config = new MemoryConfiguration();
+        }
         dbUser = config.getString("user","development");
         dbPassword = config.getString("password","development");
-        dbName = config.getString("dataBase","development");
+        dbName = config.getString("dbName","development");
         dbIp = config.getString("ip", "localhost");
-        port = config.getInt("port",5992);
+        port = config.getInt("port",3306);
         dataBase = new MySQLDataSource(dbIp,port,dbName);
         connect();
+        checkConnection();
     }
     
-    public synchronized boolean checkConnection() {
+    public final boolean checkConnection() {
         try {
-            if(connected && dbConnection.isValid(1)) {
+            if(connected && dbConnection.isValid(5)) {
                 connected = true;
                 return true;
             } else {
@@ -91,30 +99,30 @@ public class DatabaseVoteStorage implements VoteStorage{
         }
     }
     
-    private synchronized void connect() {
+    private void connect() {
         try {
             dbConnection = dataBase.getConnection(dbUser, dbPassword);
             
             checkTables();
             
             addVote = dbConnection
-                .prepareStatement("INSERT INTO votes VALUES (?,?,?,?,?)");
+                .prepareStatement("INSERT INTO commonervote_votes VALUES (?,?,?,?,?)");
             withdrawVote = dbConnection
-                .prepareStatement("DELETE FROM votes WHERE voter = ? AND recipient = ?");
+                .prepareStatement("DELETE FROM commonervote_votes WHERE voter = ? AND recipient = ?");
             clearPlayerVotes = dbConnection
-                .prepareStatement("DELETE FROM votes WHERE recipient = ?");
+                .prepareStatement("DELETE FROM commonervote_votes WHERE recipient = ?");
             clearOldVotes = dbConnection
-                .prepareStatement("DELETE FROM votes WHERE timestamp < ?");
+                .prepareStatement("DELETE FROM commonervote_votes WHERE timestamp < ?");
             getVotes = dbConnection
-                .prepareStatement("SELECT * FROM votes ORDER BY recipient");
+                .prepareStatement("SELECT * FROM commonervote_votes ORDER BY recipient");
             getPlayers = dbConnection
-                .prepareStatement("SELECT DISTINCT recipient FROM votes");
+                .prepareStatement("SELECT DISTINCT recipient FROM commonervote_votes");
             getPlayerVotes = dbConnection
-                .prepareStatement("SELECT * FROM votes WHERE recipient = ?");
+                .prepareStatement("SELECT * FROM commonervote_votes WHERE recipient = ?");
             hasVoted = dbConnection
-                .prepareStatement("SELECT voter FROM votes WHERE voter = ? AND recipient = ?");
+                .prepareStatement("SELECT voter FROM commonervote_votes WHERE voter = ? AND recipient = ?");
             maxWeight = dbConnection
-                .prepareStatement("SELECT MAX(weight) FROM votes WHERE voter = ? AND recipient = ?");
+                .prepareStatement("SELECT MAX(weight) FROM commonervote_votes WHERE voter = ? AND recipient = ?");
             connected = true;
         } catch (SQLException ex) {
             connected = false;
@@ -122,16 +130,27 @@ public class DatabaseVoteStorage implements VoteStorage{
         }
     }
     
-    private synchronized void checkTables() throws SQLException {
-        dbConnection.createStatement().execute("CREATE TABLE IF NOT EXISTS votes "
-                                              +"(voter VARCHAR(50), recipient VARCHAR(150), "
-                                              +"timestamp LONG(20), weight DOUBLE(10), "
-                                              +"reason VARCHAR(50))");
+    @Override
+    public void disconnect() {
+        if(connected && dbConnection!=null) {
+            try {
+                dbConnection.close();
+            } catch (SQLException ex) {
+                Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+    
+    private void checkTables() throws SQLException {
+        dbConnection.createStatement().execute("CREATE TABLE IF NOT EXISTS commonervote_votes "
+                                              +"(voter VARCHAR(50), recipient VARCHAR(50), "
+                                              +"timestamp BIGINT(20), weight DOUBLE, "
+                                              +"reason VARCHAR(150))");
     }
     
     @Override
     public Future<Map<UUID, List<Vote>>> getPlayerVotes() {
-        return new FutureTask<>(()-> {
+        return executor.submit(()-> {
             Map<UUID, List<Vote>> resultMap = new HashMap<>();
             try {
                 getVotes.setFetchSize(5000);
@@ -161,13 +180,13 @@ public class DatabaseVoteStorage implements VoteStorage{
 
     @Override
     public Future<List<Vote>> getPlayerVotes(UUID player) {
-        return new FutureTask<>(()-> {
+        return executor.submit(()-> {
             List<Vote> resultList = new ArrayList<>();
             try {
                 getPlayerVotes.setFetchSize(100);
                 getPlayerVotes.setString(1, player.toString());
                 ResultSet result = getPlayerVotes.executeQuery();
-                while(!result.next()) {
+                while(result.next()) {
                     resultList.add(new Vote(UUID.fromString(result.getString("voter")),
                                        result.getDouble("weight"),
                                        result.getLong("timestamp"),
@@ -218,7 +237,7 @@ public class DatabaseVoteStorage implements VoteStorage{
 
     @Override
     public Future<Boolean> hasVoted(Player voter, OfflinePlayer recipient) {
-        return new FutureTask<>(()-> {
+        return executor.submit(()-> {
             try {
                 hasVoted.setString(1, voter.getUniqueId().toString());
                 hasVoted.setString(2, recipient.getUniqueId().toString());
@@ -233,7 +252,7 @@ public class DatabaseVoteStorage implements VoteStorage{
 
     @Override
     public Future<Double> getMaxWeight(Player voter, OfflinePlayer recipient) {
-        return new FutureTask<>(()-> {
+        return executor.submit(()-> {
             try {
                 maxWeight.setString(1, voter.getUniqueId().toString());
                 maxWeight.setString(2, recipient.getUniqueId().toString());
@@ -262,12 +281,12 @@ public class DatabaseVoteStorage implements VoteStorage{
 
     @Override
     public Future<Boolean> hasApplied(OfflinePlayer player) {
-        return new FutureTask(()->true);
+        return executor.submit(()->true);
     }
 
     @Override
     public Future<Iterable<UUID>> getPlayers() {
-        return new FutureTask<>(()-> {
+        return executor.submit(()-> {
             Set<UUID> resultSet = new HashSet<>();
             try {
                 getPlayers.setFetchSize(5000);

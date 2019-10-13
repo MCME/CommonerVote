@@ -49,7 +49,9 @@ public class VoteReview extends AbstractCommand {
     protected void execute(CommandSender cs, String... args) {
         PluginData.clearOldVotes();
         if(args.length==0 || NumericUtil.isInt(args[0])) {
-            List<UUID> promoteablePlayers = new ArrayList<>();//PluginData.getPromoteablePlayers();////
+            PluginData.getMessageUtil().sendNotEnoughArgumentsError(cs);
+            return;
+            /*List<UUID> promoteablePlayers = new ArrayList<>();//PluginData.getPromoteablePlayers();////
             PluginData.getPlayerVotes(votes -> {
                 promoteablePlayers.addAll(votes.keySet());
                 int page = 1;
@@ -77,7 +79,7 @@ public class VoteReview extends AbstractCommand {
                 PluginData.getMessageUtil().sendFancyListMessage((Player)cs, header, messages,
                                                                  "/vote review", page);
             }, message -> PluginData.getMessageUtil().sendErrorMessage(cs, message));
-            return;
+            return;*/
         } 
         OfflinePlayer p = getOfflinePlayer(cs,args[0]);
         if(p==null) {

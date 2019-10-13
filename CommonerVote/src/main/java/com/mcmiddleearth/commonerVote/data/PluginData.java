@@ -28,6 +28,8 @@ import com.mcmiddleearth.pluginutil.message.MessageType;
 import com.mcmiddleearth.pluginutil.message.MessageUtil;
 import com.mcmiddleearth.pluginutil.message.config.FancyMessageConfigUtil;
 import com.mcmiddleearth.pluginutil.message.config.MessageParseException;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -76,14 +78,14 @@ public class PluginData {
     private static String commonerGroup = "Commoner";
     
     private static String promotionMessage = "§l§6Congrats!!! §eYou were promoted to §9§l "
-                           +commonerGroup+" §erank. Please remember the [Click=\"https://www.mcmiddleearth.com/help/terms\"]"
+                           +commonerGroup+" §erank. Please §eread the [Click=\"https://www.mcmiddleearth.com/help/terms\"]"
                            +"[Hover=\"Click here\"]§9rules[/Hover][/Click]§e.";
 
     private static boolean allowMultipleVoting = false;
     
     private static boolean automatedPromotion = true;
     
-    private static String promotionCommand = "pex user <player> group set <group>";
+    private static String promotionCommand = "lp user <player> parent set <group>";
     
     private static boolean useXpBar = true;
     
@@ -101,6 +103,8 @@ public class PluginData {
     
     private static final String internalErrorMessage = "An internal error occured!";
     
+    private static YamlConfiguration config;
+    
     static {
         messageUtil.setPluginName("Vote");
     }
@@ -110,7 +114,7 @@ public class PluginData {
     }*/
     
     public static void loadConfig() {
-        YamlConfiguration config = new YamlConfiguration();
+        config = new YamlConfiguration();
         try {
             config.load(configFile);
         } catch (IOException | InvalidConfigurationException ex) {
@@ -137,7 +141,9 @@ public class PluginData {
         useBungee = config.getBoolean("useBungee", useBungee);
         useDatabase = config.getBoolean("useDatabase", useDatabase);
         if(useDatabase) {
-            voteStorage = new DatabaseVoteStorage(config.getConfigurationSection("database"));
+            if(voteStorage==null) {
+                voteStorage = new DatabaseVoteStorage(config.getConfigurationSection("database"));
+            }
         } else {
             voteStorage = new FileVoteStorage(dataFile);
         }
@@ -157,7 +163,10 @@ public class PluginData {
     }
     
     public static YamlConfiguration getConfig() {
-        YamlConfiguration config = new YamlConfiguration();
+        YamlConfiguration config = PluginData.config;
+        if(config==null) {
+            config = new YamlConfiguration();
+        }
         config.set("validityPeriod", storageTime/1000/3600/24);
         config.set("staffWeight", staffVoteWeight);
         config.set("otherWeight", otherVoteWeight);
@@ -253,12 +262,14 @@ public class PluginData {
                     }
                     Vote vote = new Vote(voter, newWeight, reason);
                     voteStorage.addVote(recipient, vote, withdrawPrevious);
+Logger.getGlobal().info("added Vote!");
                     double score = calculateScore(recipient.getUniqueId());
                     new BukkitRunnable() {
                         @Override
                         public void run() {
                             promotePlayer(recipient,score);
                             //voteStorage.save();
+Logger.getGlobal().info("update XP Bar!");
                             updateXpBar(recipient,score);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
@@ -352,9 +363,30 @@ public class PluginData {
     
     private static void updateXpBar(OfflinePlayer player, double score) {
         if(useXpBar && player.isOnline() && !player.getPlayer().hasPermission(getCommonerPerm())) {
-                player.getPlayer().setLevel(0);
-                //double score = calculateScore(player.getUniqueId());
-                player.getPlayer().setExp(Math.min((float)score,1));
+            player.getPlayer().setLevel(0);
+            //double score = calculateScore(player.getUniqueId());
+            player.getPlayer().setExp(Math.min((float)score,1));
+            if(useBungee) {
+                try {
+                    ByteArrayDataOutput out = ByteStreams.newDataOutput();
+                    out.writeUTF("ForwardToPlayer");
+                    out.writeUTF(player.getName());
+                    out.writeUTF("CommonerVote");
+                    
+                    ByteArrayOutputStream msgbytes = new ByteArrayOutputStream();
+                    DataOutputStream msgout = new DataOutputStream(msgbytes);
+                    msgout.writeUTF("Update");
+                    
+                    out.writeShort(msgbytes.toByteArray().length);
+                    out.write(msgbytes.toByteArray());
+                    
+                    Player sender = Iterables.getFirst(Bukkit.getOnlinePlayers(), null);
+                    sender.sendPluginMessage(CommonerVotePlugin.getPluginInstance(),
+                            "BungeeCord", out.toByteArray());
+                } catch (IOException ex) {
+                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
         }
     }
     
@@ -468,7 +500,7 @@ public class PluginData {
                             promotePlayer(player,score);
                             updateXpBar(player,score);
                         }
-                    }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
+                    }.runTask(CommonerVotePlugin.getPluginInstance());
                 } catch (InterruptedException ex) {
                     Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
                 } catch (ExecutionException | TimeoutException ex) {

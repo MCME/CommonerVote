@@ -22,6 +22,7 @@ import com.mcmiddleearth.commonerVote.data.PluginData;
 import com.mcmiddleearth.commonerVote.command.VoteCommandExecutor;
 import com.mcmiddleearth.commonerVote.data.Vote;
 import com.mcmiddleearth.commonerVote.listener.PlayerListener;
+import com.mcmiddleearth.commonerVote.listener.XPUpdateListener;
 import lombok.Getter;
 import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -42,7 +43,8 @@ public class CommonerVotePlugin extends JavaPlugin {
         PluginData.loadConfig();
         //PluginData.loadData();
         if(PluginData.isUseBungee()) {
-            
+            this.getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+            this.getServer().getMessenger().registerIncomingPluginChannel(this, "BungeeCord", new XPUpdateListener());
         }
         getServer().getPluginManager().registerEvents(new PlayerListener(), this);
         getCommand("vote").setExecutor(new VoteCommandExecutor());

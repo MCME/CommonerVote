@@ -29,6 +29,8 @@ import org.bukkit.entity.Player;
  */
 public interface VoteStorage {
 
+    public void disconnect();
+    
     public Future<Map<UUID, List<Vote>>> getPlayerVotes();
     
     public Future<List<Vote>> getPlayerVotes(UUID recipient);

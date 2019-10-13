@@ -23,6 +23,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.logging.Level;
@@ -41,6 +44,8 @@ public class FileVoteStorage implements VoteStorage{
     private final static Map<UUID,List<Vote>> playerVotes = new HashMap<>();
     
     private final File dataFile;
+    
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     
     public FileVoteStorage(File dataFile) {
         this.dataFile = dataFile;
@@ -79,12 +84,12 @@ public class FileVoteStorage implements VoteStorage{
 
     @Override
     public Future<Map<UUID, List<Vote>>> getPlayerVotes() {
-        return new FutureTask(() -> playerVotes);
+        return executor.submit(() -> playerVotes);
     }
     
     @Override
     public Future<List<Vote>> getPlayerVotes(UUID player) {
-        return new FutureTask(()->playerVotes.get(player));
+        return executor.submit(()->playerVotes.get(player));
     }
     
     @Override
@@ -129,22 +134,25 @@ public class FileVoteStorage implements VoteStorage{
 
     @Override
     public Future<Boolean> hasVoted(Player voter, OfflinePlayer recipient) {
-        return new FutureTask(()-> {
+        return executor.submit(()-> {
             List<Vote> votes = playerVotes.get(recipient.getUniqueId());
+//Logger.getGlobal().info("Has Voted!!");
             if(votes!=null) {
                 for(Vote vote: votes) {
                     if(vote.getVoter().equals(voter.getUniqueId())) {
+//Logger.getGlobal().info("Has Voted!! -> true");
                         return true;
                     }
                 }
             }
+//Logger.getGlobal().info("Has Voted!! -> false");
             return false;
         });
     }
 
     @Override
     public Future<Double> getMaxWeight(Player voter, OfflinePlayer recipient) {
-        return new FutureTask(()->{
+        return executor.submit(()->{
             List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
             double result = 0;
             if(votes!=null) {
@@ -164,12 +172,12 @@ public class FileVoteStorage implements VoteStorage{
 
     @Override
     public Future<Boolean> hasApplied(OfflinePlayer player) {
-        return new FutureTask(()->playerVotes.containsKey(player.getUniqueId()));
+        return executor.submit(()->playerVotes.containsKey(player.getUniqueId()));
     }
 
     @Override
     public Future<Iterable<UUID>> getPlayers() {
-        return new FutureTask(()->playerVotes.keySet());
+        return executor.submit(()->playerVotes.keySet());
     }
 
     @Override
@@ -200,5 +208,7 @@ public class FileVoteStorage implements VoteStorage{
         votes.removeAll(old);
     }
 
+    @Override
+    public void disconnect(){};
     
 }

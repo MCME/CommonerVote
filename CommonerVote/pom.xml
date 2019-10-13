@@ -23,6 +23,33 @@
                     <target>1.8</target>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>2.4.3</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <minimizeJar>false</minimizeJar>
+                            <artifactSet>
+                                <includes>
+                                    <include> org.mariadb.jdbc:mariadb-java-client </include>
+                                </includes>
+                                <!--<excludes>
+                                    <exclude>org.projectlombok:lombok</exclude>
+                                    <exclude>com.sk89q:worldedit</exclude>
+                                    <exclude>org.bukkit:bukkit</exclude>
+                                    <exclude>org.spigotmc:spigot-api</exclude>
+                                </excludes>-->
+                            </artifactSet>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
         <resources>
           <resource>
