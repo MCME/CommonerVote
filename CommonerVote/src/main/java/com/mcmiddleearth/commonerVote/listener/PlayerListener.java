@@ -35,7 +35,7 @@ public class PlayerListener implements Listener{
         if(event.getPlayer().hasPermission(PluginData.getCommonerPerm())) {
             PluginData.clearVotes(event.getPlayer(), error -> {});
         }
-        PluginData.checkPromotion(event.getPlayer());
+        PluginData.checkPromotion(event.getPlayer(),false);
     }
     
     @EventHandler

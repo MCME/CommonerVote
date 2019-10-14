@@ -40,7 +40,7 @@ public class XPUpdateListener implements PluginMessageListener {
         }
         ByteArrayDataInput in = ByteStreams.newDataInput(message);
         String subchannel = in.readUTF();
-        if (subchannel.equals("ForwardToPlayer")) {
+        if (subchannel.equals("CommonerVote")) {
             short len = in.readShort();
             byte[] msgbytes = new byte[len];
             in.readFully(msgbytes);
@@ -48,7 +48,7 @@ public class XPUpdateListener implements PluginMessageListener {
             DataInputStream msgin = new DataInputStream(new ByteArrayInputStream(msgbytes));
             try {
                 if(msgin.readUTF().equals("Update")) {
-                    PluginData.checkPromotion(player);
+                    PluginData.checkPromotion(player, false);
                 }
             } catch (IOException ex) {
                 Logger.getLogger(XPUpdateListener.class.getName()).log(Level.SEVERE, null, ex);

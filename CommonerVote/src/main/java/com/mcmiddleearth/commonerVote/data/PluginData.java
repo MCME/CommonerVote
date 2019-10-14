@@ -262,15 +262,13 @@ public class PluginData {
                     }
                     Vote vote = new Vote(voter, newWeight, reason);
                     voteStorage.addVote(recipient, vote, withdrawPrevious);
-Logger.getGlobal().info("added Vote!");
                     double score = calculateScore(recipient.getUniqueId());
                     new BukkitRunnable() {
                         @Override
                         public void run() {
                             promotePlayer(recipient,score);
                             //voteStorage.save();
-Logger.getGlobal().info("update XP Bar!");
-                            updateXpBar(recipient,score);
+                            updateXpBar(recipient,score,true);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
                 } catch (InterruptedException ex) {
@@ -293,7 +291,7 @@ Logger.getGlobal().info("update XP Bar!");
                     new BukkitRunnable() {
                         @Override
                         public void run() {
-                            updateXpBar(recipient, score);
+                            updateXpBar(recipient, score, true);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
                 } catch (InterruptedException ex) {
@@ -361,12 +359,14 @@ Logger.getGlobal().info("update XP Bar!");
         }
     }
     
-    private static void updateXpBar(OfflinePlayer player, double score) {
-        if(useXpBar && player.isOnline() && !player.getPlayer().hasPermission(getCommonerPerm())) {
-            player.getPlayer().setLevel(0);
-            //double score = calculateScore(player.getUniqueId());
-            player.getPlayer().setExp(Math.min((float)score,1));
-            if(useBungee) {
+    private static void updateXpBar(OfflinePlayer player, double score, boolean bungeeUpdate) {
+        if(useXpBar) {
+            if(player.isOnline() && !player.getPlayer().hasPermission(getCommonerPerm())) {
+                player.getPlayer().setLevel(0);
+                //double score = calculateScore(player.getUniqueId());
+                player.getPlayer().setExp(Math.min((float)score,1));
+            }
+            else if(useBungee && bungeeUpdate) {
                 try {
                     ByteArrayDataOutput out = ByteStreams.newDataOutput();
                     out.writeUTF("ForwardToPlayer");
@@ -437,7 +437,7 @@ Logger.getGlobal().info("update XP Bar!");
                     new BukkitRunnable() {
                         @Override
                         public void run() {
-                            updateXpBar(player, score);
+                            updateXpBar(player, score, true);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
                 } catch (InterruptedException ex) {
@@ -488,7 +488,7 @@ Logger.getGlobal().info("update XP Bar!");
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
     
-    public static void checkPromotion(Player player) {
+    public static void checkPromotion(Player player, boolean bungeeUpdate) {
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -498,7 +498,7 @@ Logger.getGlobal().info("update XP Bar!");
                         @Override
                         public void run() {
                             promotePlayer(player,score);
-                            updateXpBar(player,score);
+                            updateXpBar(player,score,bungeeUpdate);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
                 } catch (InterruptedException ex) {
