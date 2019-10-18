@@ -40,7 +40,7 @@ public class VoteClear extends AbstractCommand {
         if(p==null) {
             return;
         }
-        PluginData.clearVotes(p);
+        PluginData.clearVotes(p, error -> PluginData.getMessageUtil().sendErrorMessage(cs, error));
         sendClearedMessage(cs);
     }
 
