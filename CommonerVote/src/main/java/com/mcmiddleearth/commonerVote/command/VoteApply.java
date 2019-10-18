@@ -37,12 +37,14 @@ public class VoteApply extends AbstractCommand {
     @Override
     protected void execute(CommandSender cs, String... args) {
         Player player = (Player) cs;
-        if(PluginData.hasApplied(player)) {
-            sendAlreadyAppliedMessage(cs);
-            return;
-        }
-        PluginData.apply(player);
-        sendAppliedMessage(cs);
+        PluginData.hasApplied(player, applied -> {
+            if(applied) {
+                sendAlreadyAppliedMessage(cs);
+                return;
+            }
+            PluginData.apply(player);
+            sendAppliedMessage(cs);
+        }, error -> PluginData.getMessageUtil().sendErrorMessage(cs, error));
     }
 
     private void sendAlreadyAppliedMessage(CommandSender cs) {

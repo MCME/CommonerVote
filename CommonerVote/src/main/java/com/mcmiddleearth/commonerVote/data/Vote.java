@@ -50,7 +50,7 @@ public final class Vote implements ConfigurationSerializable {
         this.reason = reason;
     }
     
-    private Vote(UUID voter, double weight, long timestamp, String reason) {
+    public Vote(UUID voter, double weight, long timestamp, String reason) {
         this.voter = voter;
         this.weight = weight;
         this.timestamp = timestamp;

@@ -1,0 +1,19 @@
+validityPeriod: 100
+staffWeight: 2
+otherWeight: 1
+votesNeeded: 10
+allowMultipleVotes: false
+automatedPromotion: true
+useXpBar: true
+applicationNeeded: false
+commonerGroupName: commoner
+promotionMessage: §l§6Congrats!!! §eYou were promoted to §9§l Commoner §erank.
+promotionCommand: 'lp user <player> parent set <group> '
+useDatabase: true
+database:
+  dbName: development
+  user: development
+  password: development
+  ip: localhost
+  port: 3306
+useBungee: true

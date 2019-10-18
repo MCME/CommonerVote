@@ -33,10 +33,9 @@ public class PlayerListener implements Listener{
     @EventHandler
     public void playerJoins(PlayerJoinEvent event) {
         if(event.getPlayer().hasPermission(PluginData.getCommonerPerm())) {
-            PluginData.clearVotes(event.getPlayer());
+            PluginData.clearVotes(event.getPlayer(), error -> {});
         }
-        PluginData.promotePlayer(event.getPlayer());
-        PluginData.updateXpBar(event.getPlayer());
+        PluginData.checkPromotion(event.getPlayer(),false);
     }
     
     @EventHandler

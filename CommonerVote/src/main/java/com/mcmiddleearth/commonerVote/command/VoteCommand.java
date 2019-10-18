@@ -47,10 +47,20 @@ public class VoteCommand extends AbstractCommand {
                 return;
             }
         }
-        if(PluginData.isApplicationNeeded() && !PluginData.hasApplied(p)) {
-            sendNotAppliedError(cs);
-            return;
+        if(PluginData.isApplicationNeeded()) {
+            PluginData.hasApplied(p, applied -> {
+                if(!applied) {
+                    sendNotAppliedError(cs);
+                } else {
+                    handleApplication(cs, p, args);
+                }
+            }, error -> PluginData.getMessageUtil().sendErrorMessage(cs, error));
+        } else {
+            handleApplication(cs, p, args);
         }
+    }
+
+    private void handleApplication(CommandSender cs, OfflinePlayer p, String[] args) {
         if(p.getUniqueId().equals(((Player)cs).getUniqueId())) {
             sendDontBeStupidError(cs);
             return;
@@ -59,13 +69,16 @@ public class VoteCommand extends AbstractCommand {
         for(int i = 1; i<args.length; i++) {
             reason = reason + args[i];
         }
-        if(!PluginData.getAllowMultipleVoting() && PluginData.hasVoted((Player)cs, p)) {
-            PluginData.addVote((Player) cs, p, reason);
-            sendAlreadyVotedMessage(cs);
-        } else {
-            PluginData.addVote((Player) cs, p, reason);
-            sendVotedMessage(cs);
-        }
+        String finalReason = reason;
+        PluginData.hasVoted((Player)cs,p, voted -> {
+            if(!PluginData.getAllowMultipleVoting() && voted) {
+                PluginData.addVote((Player) cs, p, finalReason);
+                sendAlreadyVotedMessage(cs);
+            } else {
+                PluginData.addVote((Player) cs, p, finalReason);
+                sendVotedMessage(cs);
+            }
+        }, error -> PluginData.getMessageUtil().sendErrorMessage(cs, error));
     }
 
     private void sendVotedMessage(CommandSender cs) {
