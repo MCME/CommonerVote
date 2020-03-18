@@ -21,7 +21,6 @@ package com.mcmiddleearth.commonerVote.data;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import lombok.Getter;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.entity.Player;
 
@@ -31,16 +30,9 @@ import org.bukkit.entity.Player;
  */
 public final class Vote implements ConfigurationSerializable {
     
-    @Getter
     private final UUID voter;
-    
-    @Getter
     private final double weight;
-    
-    @Getter
     private final long timestamp;
-    
-    @Getter
     private final String reason;
     
     public Vote(Player voter, double weight, String reason) { 
@@ -95,6 +87,20 @@ public final class Vote implements ConfigurationSerializable {
         Vote result = new Vote(UUID.fromString((String)id),(Double) weight,(Long)time, (String) reason);
         return result;
     }
-    
-    
+
+    public UUID getVoter() {
+        return voter;
+    }
+
+    public double getWeight() {
+        return weight;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public String getReason() {
+        return reason;
+    }
 }
