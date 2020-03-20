@@ -23,7 +23,6 @@ import com.mcmiddleearth.commonerVote.command.VoteCommandExecutor;
 import com.mcmiddleearth.commonerVote.data.Vote;
 import com.mcmiddleearth.commonerVote.listener.PlayerListener;
 import com.mcmiddleearth.commonerVote.listener.XPUpdateListener;
-import lombok.Getter;
 import org.bukkit.configuration.serialization.ConfigurationSerialization;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -33,7 +32,6 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public class CommonerVotePlugin extends JavaPlugin {
     
-    @Getter
     private static CommonerVotePlugin pluginInstance;
     
     @Override
@@ -50,5 +48,8 @@ public class CommonerVotePlugin extends JavaPlugin {
         getCommand("vote").setExecutor(new VoteCommandExecutor());
         getLogger().info("Enabled!");
     }
-    
+
+    public static com.mcmiddleearth.commonerVote.CommonerVotePlugin getPluginInstance() {
+        return pluginInstance;
+    }
 }

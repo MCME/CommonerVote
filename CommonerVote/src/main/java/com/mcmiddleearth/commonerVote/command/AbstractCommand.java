@@ -20,8 +20,6 @@ package com.mcmiddleearth.commonerVote.command;
 
 import com.mcmiddleearth.commonerVote.data.PluginData;
 import java.util.List;
-import lombok.Getter;
-import lombok.Setter;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
@@ -35,15 +33,13 @@ public abstract class AbstractCommand {
     
     private final String[] permissionNodes;
     
-    @Getter
     private final int minArgs;
     
     private boolean playerOnly = true;
     
-    @Getter
-    @Setter
-    private String usageDescription, shortDescription;
-    
+    private String usageDescription;
+    private String shortDescription;
+
     public AbstractCommand(int minArgs, boolean playerOnly, String... permissionNodes) {
         this.minArgs = minArgs;
         this.playerOnly = playerOnly;
@@ -129,5 +125,23 @@ public abstract class AbstractCommand {
         PluginData.getMessageUtil().sendErrorMessage(cs, "Player has not applied for Commoner rank.");
     }
 
-    
+    public int getMinArgs() {
+        return minArgs;
+    }
+
+    public String getUsageDescription() {
+        return usageDescription;
+    }
+
+    public void setUsageDescription(String usageDescription) {
+        this.usageDescription = usageDescription;
+    }
+
+    public String getShortDescription() {
+        return shortDescription;
+    }
+
+    public void setShortDescription(String shortDescription) {
+        this.shortDescription = shortDescription;
+    }
 }
