@@ -390,11 +390,12 @@ public class PluginData {
                 && score >= 0.9999 //calculateScore(player.getUniqueId())>=0.9999
                 && !player.getPlayer().hasPermission(getCommonerPerm())) {
             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), promotionCommand.replace("<player>", player.getName()).replace("<group>", commonerGroup));//"pex user "+player.getName()+" group set "+commonerGroup.toLowerCase());
+            String commonergroupCapitalized = commonerGroup.substring(0, 1).toUpperCase() + commonerGroup.substring(1);
             Bukkit.getOnlinePlayers().forEach(p ->
                     messageUtil.sendInfoMessage(p.getPlayer(),
                             "" + ChatColor.GOLD + ChatColor.BOLD + "Congrats!!! "
-                                    + ChatColor.YELLOW + player.getName() + "has been promoted to "
-                                    + ChatColor.BLUE + ChatColor.BOLD + commonerGroup + ChatColor.YELLOW + " rank."));
+                                    + ChatColor.YELLOW + player.getName() + " has been promoted to "
+                                    + ChatColor.BLUE + ChatColor.BOLD + commonergroupCapitalized + ChatColor.YELLOW + " rank."));
             sendPromotionMessage(player.getPlayer());
             player.getPlayer().recalculatePermissions();
             player.getPlayer().setLevel(0);
