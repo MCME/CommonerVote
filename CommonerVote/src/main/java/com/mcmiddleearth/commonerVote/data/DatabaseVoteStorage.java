@@ -32,7 +32,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import lombok.Getter;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.MemoryConfiguration;
@@ -65,7 +64,6 @@ public class DatabaseVoteStorage implements VoteStorage{
     private PreparedStatement hasVoted;
     private PreparedStatement maxWeight;
     
-    @Getter
     private boolean connected = false;
     
     private ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -309,5 +307,9 @@ public class DatabaseVoteStorage implements VoteStorage{
         } catch (SQLException ex) {
             Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
         }
+    }
+
+    public boolean isConnected() {
+        return connected;
     }
 }

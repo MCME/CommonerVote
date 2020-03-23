@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.mcmiddleearth</groupId>
     <artifactId>CommonerVote</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -11,8 +11,8 @@
         <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
     <build>
-    <!-- <sourceDirectory>${project.build.directory}/generated-sources/delombok</sourceDirectory> -->
-    
+        <!-- <sourceDirectory>${project.build.directory}/generated-sources/delombok</sourceDirectory> -->
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -52,14 +52,14 @@
             </plugin>
         </plugins>
         <resources>
-          <resource>
-            <filtering>true</filtering>
-            <directory>${basedir}/src/main/resources</directory>
-            <includes>
-                <include>plugin.yml</include>
-                <include>config.yml</include>
-            </includes>
-          </resource>
+            <resource>
+                <filtering>true</filtering>
+                <directory>${basedir}/src/main/resources</directory>
+                <includes>
+                    <include>plugin.yml</include>
+                    <include>config.yml</include>
+                </includes>
+            </resource>
         </resources>
     </build>
     <repositories>
@@ -70,12 +70,6 @@
     </repositories>
     <dependencies>
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.16.12</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
             <groupId>org.bukkit</groupId>
             <artifactId>bukkit</artifactId>
             <version>1.13.2-R0.1-SNAPSHOT</version>
@@ -85,7 +79,7 @@
         <dependency>
             <groupId>com.mcmiddleearth</groupId>
             <artifactId>PluginUtils</artifactId>
-            <version>1.2-SNAPSHOT-native-002</version>
+            <version>1.2.4</version>
         </dependency>
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>

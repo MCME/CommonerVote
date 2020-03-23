@@ -23,7 +23,6 @@ import com.mcmiddleearth.commonerVote.data.PluginData;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import lombok.Getter;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -34,7 +33,6 @@ import org.bukkit.command.CommandSender;
  */
 public class VoteCommandExecutor implements CommandExecutor {
 
-    @Getter
     private final Map <String, AbstractCommand> commands = new LinkedHashMap <>();
     
     public VoteCommandExecutor() {
@@ -76,5 +74,8 @@ public class VoteCommandExecutor implements CommandExecutor {
     private void addCommandHandler(String name, AbstractCommand handler) {
         commands.put(name, handler);
     }
-    
+
+    public Map<String, AbstractCommand> getCommands() {
+        return commands;
+    }
 }
