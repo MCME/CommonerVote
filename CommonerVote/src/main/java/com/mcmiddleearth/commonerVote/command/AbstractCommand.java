@@ -19,15 +19,9 @@
 package com.mcmiddleearth.commonerVote.command;
 
 import com.mcmiddleearth.commonerVote.data.PluginData;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 
 import java.util.List;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
+
 
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
@@ -92,22 +86,42 @@ public abstract class AbstractCommand {
     protected abstract void execute(CommandSender cs, String... args);
 
     protected OfflinePlayer getOfflinePlayer(CommandSender cs, String playerName) {
-        List<Player> player = Bukkit.matchPlayer(playerName);
-        if(player.size()>1) {
-            sendMoreThanOnePlayerFoundMessage(cs);
-            return null;
-        } else if(player.size()==1) {
-            return player.get(0);
-        } else {
-            OfflinePlayer offline = Bukkit.getOfflinePlayer(playerName);
-            if(offline.hasPlayedBefore()) {
-                return offline;
-            } else {
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(o);
+        ByteArrayInputStream i = new ByteArrayInputStream(null);
+        DataInputStream in = new DataInputStream(i);
+        try {
+            Logger.getGlobal.info(playerName);
+            out.writeUTF("PlayerList");
+            out.writeUTF("ALL");
+            String server = in.readUTF();
+            String[] playerList = in.readUTF().split(", ");
+            Logger.getGlobal.info(playerList);
+            String playerQueue = "%" + playerName + "%";
+            List<String> playerListFiltered = playerList.stream()
+                    .filter(pn -> pn.toUpperCase().equals(playerQueue.toUpperCase()))
+                    .collect(Collectors.toList());
+            Logger.getGlobal.info(playerListFiltered.size());
+
+            if (playerListFiltered.size() == 1) {
+                out.writeUTF("UUIDOther");
+                out.writeUTF(playerName);
+                String playerName = in.readUTF();
+                String uuid = in.readUTF();
+                Logger.getGlobal.info(uuid);
+                return Bukkit.getOfflinePlayer(uuid);
+            } else if (playerListFiltered.size() <= 0) {
                 sendPlayerNotFoundMessage(cs);
                 return null;
+            } else {
+                sendMoreThanOnePlayerFoundMessage(cs);
+                return null;
             }
+        } catch (Exception e) {
+            this.sendIOException(cs);
         }
     }
+
     /*protected OfflinePlayer getOfflinePlayer(CommandSender cs, String playerName) {
         ByteArrayOutputStream o = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(o);
@@ -145,6 +159,7 @@ public abstract class AbstractCommand {
         }
         return null;
     }*/
+
 
     private void sendIOException(CommandSender cs) {
         PluginData.getMessageUtil().sendErrorMessage(cs, "Something went wrong. Contact an admin please.");
