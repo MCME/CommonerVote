@@ -86,39 +86,20 @@ public abstract class AbstractCommand {
     protected abstract void execute(CommandSender cs, String... args);
 
     protected OfflinePlayer getOfflinePlayer(CommandSender cs, String playerName) {
-        ByteArrayOutputStream o = new ByteArrayOutputStream();
-        DataOutputStream out = new DataOutputStream(o);
-        ByteArrayInputStream i = new ByteArrayInputStream(null);
-        DataInputStream in = new DataInputStream(i);
-        try {
-            Logger.getGlobal.info(playerName);
-            out.writeUTF("PlayerList");
-            out.writeUTF("ALL");
-            String server = in.readUTF();
-            String[] playerList = in.readUTF().split(", ");
-            Logger.getGlobal.info(playerList);
-            String playerQueue = "%" + playerName + "%";
-            List<String> playerListFiltered = playerList.stream()
-                    .filter(pn -> pn.toUpperCase().equals(playerQueue.toUpperCase()))
-                    .collect(Collectors.toList());
-            Logger.getGlobal.info(playerListFiltered.size());
-
-            if (playerListFiltered.size() == 1) {
-                out.writeUTF("UUIDOther");
-                out.writeUTF(playerName);
-                String playerName = in.readUTF();
-                String uuid = in.readUTF();
-                Logger.getGlobal.info(uuid);
-                return Bukkit.getOfflinePlayer(uuid);
-            } else if (playerListFiltered.size() <= 0) {
+        List<Player> player = Bukkit.matchPlayer(playerName);
+        if(player.size()>1) {
+            sendMoreThanOnePlayerFoundMessage(cs);
+            return null;
+        } else if(player.size()==1) {
+            return player.get(0);
+        } else {
+            OfflinePlayer offline = Bukkit.getOfflinePlayer(playerName);
+            if(offline.hasPlayedBefore()) {
+                return offline;
+            } else {
                 sendPlayerNotFoundMessage(cs);
                 return null;
-            } else {
-                sendMoreThanOnePlayerFoundMessage(cs);
-                return null;
             }
-        } catch (Exception e) {
-            this.sendIOException(cs);
         }
     }
 
