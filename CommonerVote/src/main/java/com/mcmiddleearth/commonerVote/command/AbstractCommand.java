@@ -22,6 +22,7 @@ import com.mcmiddleearth.commonerVote.data.PluginData;
 
 import java.util.List;
 
+
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
@@ -120,6 +121,45 @@ public abstract class AbstractCommand {
             this.sendIOException(cs);
         }
     }
+
+    /*protected OfflinePlayer getOfflinePlayer(CommandSender cs, String playerName) {
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(o);
+        ByteArrayInputStream i = new ByteArrayInputStream(null);
+        DataInputStream in = new DataInputStream(i);
+        try {
+//            Logger.getGlobal().info(playerName);
+            out.writeUTF("PlayerList");
+            out.writeUTF("ALL");
+            String server = in.readUTF();
+            String[] playerList = in.readUTF().split(", ");
+//            Logger.getGlobal.info(playerList);
+            String playerQueue = "%" + playerName + "%";
+            List<String> playerListFiltered = playerList.stream()
+                    .filter(pn -> pn.toUpperCase().equals(playerQueue.toUpperCase()))
+                    .collect(Collectors.toList());
+//            Logger.getGlobal.info(playerListFiltered.size());
+
+            if (playerListFiltered.size() == 1) {
+                out.writeUTF("UUIDOther");
+                out.writeUTF(playerName);
+                String playerName = in.readUTF();
+                String uuid = in.readUTF();
+//                Logger.getGlobal.info(uuid);
+                return Bukkit.getOfflinePlayer(uuid);
+            } else if (playerListFiltered.size() <= 0) {
+                sendPlayerNotFoundMessage(cs);
+                return null;
+            } else {
+                sendMoreThanOnePlayerFoundMessage(cs);
+                return null;
+            }
+        } catch (IOException e) {
+            this.sendIOException(cs);
+        }
+        return null;
+    }*/
+
 
     private void sendIOException(CommandSender cs) {
         PluginData.getMessageUtil().sendErrorMessage(cs, "Something went wrong. Contact an admin please.");
