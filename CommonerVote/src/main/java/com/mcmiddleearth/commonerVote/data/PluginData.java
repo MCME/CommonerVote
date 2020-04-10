@@ -390,12 +390,13 @@ public class PluginData {
                 && score >= 0.9999 //calculateScore(player.getUniqueId())>=0.9999
                 && !player.getPlayer().hasPermission(getCommonerPerm())) {
             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), promotionCommand.replace("<player>", player.getName()).replace("<group>", commonerGroup));//"pex user "+player.getName()+" group set "+commonerGroup.toLowerCase());
-            String commonergroupCapitalized = commonerGroup.substring(0, 1).toUpperCase() + commonerGroup.substring(1);
-            Bukkit.getOnlinePlayers().forEach(p ->
-                    messageUtil.sendInfoMessage(p.getPlayer(),
+            Bukkit.getOnlinePlayers().stream()
+                    .filter(p -> !p.getName().equals(player.getName()))
+                    .forEach(p ->
+                        messageUtil.sendInfoMessage(p.getPlayer(),
                             "" + ChatColor.GOLD + ChatColor.BOLD + "Congrats!!! "
                                     + ChatColor.YELLOW + player.getName() + " has been promoted to "
-                                    + ChatColor.BLUE + ChatColor.BOLD + commonergroupCapitalized + ChatColor.YELLOW + " rank."));
+                                    + ChatColor.BLUE + ChatColor.BOLD + this.getComonnergroupCapitalized() + ChatColor.YELLOW + " rank."));
             sendPromotionMessage(player.getPlayer());
             player.getPlayer().recalculatePermissions();
             player.getPlayer().setLevel(0);
@@ -407,9 +408,44 @@ public class PluginData {
             }*/
         }
     }
+
+    public static void sendPromotionMessage(Player player) {
+        if (!useBungee) {
+            List<String> message = new ArrayList<>();
+            message.add(promotionMessage);
+            try {
+                FancyMessageConfigUtil.addFromStringList(new FancyMessage(MessageType.WHITE,
+                                PluginData.getMessageUtil()),
+                        message)
+                        .setRunDirect()
+                        .send(player);
+            } catch (MessageParseException ex) {
+                messageUtil.sendInfoMessage(player.getPlayer(),
+                        "" + ChatColor.GOLD + ChatColor.BOLD + "Congrats!!! "
+                                + ChatColor.YELLOW + "You were promoted to "
+                                + ChatColor.BLUE + ChatColor.BOLD + this.getComonnergroupCapitalized() + ChatColor.YELLOW + " rank.");
+            }
+        } else {
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    ByteArrayDataOutput out = ByteStreams.newDataOutput();
+                    out.writeUTF("Message");
+                    out.writeUTF(player.getName());
+                    out.writeUTF(promotionMessage);
+                    Player sender = Iterables.getFirst(Bukkit.getOnlinePlayers(), null);
+
+                    if (sender != null) {
+                        sender.sendPluginMessage(CommonerVotePlugin.getPluginInstance(),
+                                "BungeeCord", out.toByteArray());
+                    }
+                }
+            }.runTaskLater(CommonerVotePlugin.getPluginInstance(), 5);
+        }
+    }
     
     /*private static void getMaxWeight(Player voter, OfflinePlayer recipient,
-                                     Consumer<Double> success, 
+                                     Consumer<Double> success,
                                      Consumer<String> fail) {
         new BukkitRunnable() {
             @Override
@@ -536,39 +572,8 @@ public class PluginData {
         voteStorage.clearOldVotes();
     }
 
-    public static void sendPromotionMessage(Player player) {
-        if (!useBungee) {
-            List<String> message = new ArrayList<>();
-            message.add(promotionMessage);
-            try {
-                FancyMessageConfigUtil.addFromStringList(new FancyMessage(MessageType.WHITE,
-                                PluginData.getMessageUtil()),
-                        message)
-                        .setRunDirect()
-                        .send(player);
-            } catch (MessageParseException ex) {
-                messageUtil.sendInfoMessage(player.getPlayer(),
-                        "" + ChatColor.GOLD + ChatColor.BOLD + "Congrats!!! "
-                                + ChatColor.YELLOW + "You were promoted to "
-                                + ChatColor.BLUE + ChatColor.BOLD + commonerGroup + ChatColor.YELLOW + " rank.");
-            }
-        } else {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    ByteArrayDataOutput out = ByteStreams.newDataOutput();
-                    out.writeUTF("Message");
-                    out.writeUTF(player.getName());
-                    out.writeUTF(promotionMessage);
-                    Player sender = Iterables.getFirst(Bukkit.getOnlinePlayers(), null);
-
-                    if (sender != null) {
-                        sender.sendPluginMessage(CommonerVotePlugin.getPluginInstance(),
-                                "BungeeCord", out.toByteArray());
-                    }
-                }
-            }.runTaskLater(CommonerVotePlugin.getPluginInstance(), 5);
-        }
+    private String getComonnergroupCapitalized() {
+        return commonerGroup.substring(0, 1).toUpperCase() + commonerGroup.substring(1);
     }
 
     public static boolean getAllowMultipleVoting() {
