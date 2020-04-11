@@ -22,6 +22,7 @@ import com.mcmiddleearth.commonerVote.data.PluginData;
 
 import java.util.List;
 
+
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.CommandSender;
@@ -101,6 +102,7 @@ public abstract class AbstractCommand {
             }
         }
     }
+
 
     protected void sendPlayerOnlyErrorMessage(CommandSender cs) {
         PluginData.getMessageUtil().sendErrorMessage(cs, "You have to be logged in to run this command.");
