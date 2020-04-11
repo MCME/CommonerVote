@@ -396,7 +396,7 @@ public class PluginData {
                         messageUtil.sendInfoMessage(p.getPlayer(),
                             "" + ChatColor.GOLD + ChatColor.BOLD + "Congrats!!! "
                                     + ChatColor.YELLOW + player.getName() + " has been promoted to "
-                                    + ChatColor.BLUE + ChatColor.BOLD + this.getComonnergroupCapitalized() + ChatColor.YELLOW + " rank."));
+                                    + ChatColor.BLUE + ChatColor.BOLD + getCommonergroupCapitalized() + ChatColor.YELLOW + " rank."));
             sendPromotionMessage(player.getPlayer());
             player.getPlayer().recalculatePermissions();
             player.getPlayer().setLevel(0);
@@ -423,7 +423,7 @@ public class PluginData {
                 messageUtil.sendInfoMessage(player.getPlayer(),
                         "" + ChatColor.GOLD + ChatColor.BOLD + "Congrats!!! "
                                 + ChatColor.YELLOW + "You were promoted to "
-                                + ChatColor.BLUE + ChatColor.BOLD + this.getComonnergroupCapitalized() + ChatColor.YELLOW + " rank.");
+                                + ChatColor.BLUE + ChatColor.BOLD + getCommonergroupCapitalized() + ChatColor.YELLOW + " rank.");
             }
         } else {
             new BukkitRunnable() {
@@ -572,7 +572,7 @@ public class PluginData {
         voteStorage.clearOldVotes();
     }
 
-    private String getComonnergroupCapitalized() {
+    private static String getCommonergroupCapitalized() {
         return commonerGroup.substring(0, 1).toUpperCase() + commonerGroup.substring(1);
     }
 
