@@ -412,7 +412,6 @@ public class PluginData {
     public static void sendPromotionMessage(Player player) {
         if (!useBungee) {
             List<String> message = new ArrayList<>();
-//            test
             message.add(promotionMessage);
             try {
                 FancyMessageConfigUtil.addFromStringList(new FancyMessage(MessageType.WHITE,
