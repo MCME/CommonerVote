@@ -5,7 +5,7 @@ author: Eriol_Eandur
 load: STARTUP
 loadbefore: [Votifier]
 depend: [PluginUtils]
-api-version: 1.13
+api-version: 1.15
 
 commands:
    vote:
