@@ -52,4 +52,9 @@ public class CommonerVotePlugin extends JavaPlugin {
     public static com.mcmiddleearth.commonerVote.CommonerVotePlugin getPluginInstance() {
         return pluginInstance;
     }
+    
+    @Override
+    public void onDisable() {
+        PluginData.disconnectVoteStorage();
+    }
 }

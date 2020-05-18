@@ -546,6 +546,10 @@ public class PluginData {
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
 
+    public static void disconnectVoteStorage() {
+        voteStorage.disconnect();
+    }
+
     public static String getCommonerPerm() {
         return Permission.EXEMPT;
     }

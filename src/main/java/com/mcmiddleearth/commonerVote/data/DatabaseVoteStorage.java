@@ -92,6 +92,13 @@ public class DatabaseVoteStorage implements VoteStorage{
             }
         } catch (SQLException ex) {
             connected = false;
+                if (dbConnection != null) {
+                    try {
+                        dbConnection.close();
+                    } catch (SQLException ex1) {
+                        Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex1);
+                    }
+                }
             connect();
             return isConnected();
         }
@@ -123,6 +130,13 @@ public class DatabaseVoteStorage implements VoteStorage{
                 .prepareStatement("SELECT MAX(weight) FROM commonervote_votes WHERE voter = ? AND recipient = ?");
             connected = true;
         } catch (SQLException ex) {
+            if (dbConnection != null) {
+                try {
+                    dbConnection.close();
+                } catch (SQLException ex1) {
+                    Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex1);
+                }
+            }
             connected = false;
             Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, "Connection to DB failed", ex);
         }
