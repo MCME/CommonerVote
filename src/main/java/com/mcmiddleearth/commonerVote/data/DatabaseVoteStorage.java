@@ -16,6 +16,7 @@
  */
 package com.mcmiddleearth.commonerVote.data;
 
+import com.mcmiddleearth.commonerVote.CommonerVotePlugin;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -36,6 +37,8 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.mariadb.jdbc.MySQLDataSource;
 
 /**
@@ -66,6 +69,8 @@ public class DatabaseVoteStorage implements VoteStorage{
     
     private boolean connected = false;
     
+    private BukkitTask keepAliveTask;
+    
     private ExecutorService executor = Executors.newSingleThreadExecutor();
     
     public DatabaseVoteStorage(ConfigurationSection config) {
@@ -79,12 +84,19 @@ public class DatabaseVoteStorage implements VoteStorage{
         port = config.getInt("port",3306);
         dataBase = new MySQLDataSource(dbIp,port,dbName);
         connect();
-        checkConnection();
+        keepAliveTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                checkConnection();
+            }
+        }.runTaskTimerAsynchronously(CommonerVotePlugin.getPluginInstance(), 0, 1200);
     }
     
     public final boolean checkConnection() {
         try {
             if(connected && dbConnection.isValid(5)) {
+                CommonerVotePlugin.getPluginInstance().getLogger().log(Level.INFO,
+                        "Successfully checked connection to vote database.");
                 connected = true;
                 return true;
             } else {
@@ -92,6 +104,13 @@ public class DatabaseVoteStorage implements VoteStorage{
             }
         } catch (SQLException ex) {
             connected = false;
+                if (dbConnection != null) {
+                    try {
+                        dbConnection.close();
+                    } catch (SQLException ex1) {
+                        Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex1);
+                    }
+                }
             connect();
             return isConnected();
         }
@@ -123,6 +142,13 @@ public class DatabaseVoteStorage implements VoteStorage{
                 .prepareStatement("SELECT MAX(weight) FROM commonervote_votes WHERE voter = ? AND recipient = ?");
             connected = true;
         } catch (SQLException ex) {
+            if (dbConnection != null) {
+                try {
+                    dbConnection.close();
+                } catch (SQLException ex1) {
+                    Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex1);
+                }
+            }
             connected = false;
             Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, "Connection to DB failed", ex);
         }
@@ -130,6 +156,9 @@ public class DatabaseVoteStorage implements VoteStorage{
     
     @Override
     public void disconnect() {
+        if (keepAliveTask != null) {
+            keepAliveTask.cancel();
+        }
         if(connected && dbConnection!=null) {
             try {
                 dbConnection.close();
