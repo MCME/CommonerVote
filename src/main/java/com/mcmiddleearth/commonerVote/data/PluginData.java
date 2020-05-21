@@ -209,15 +209,7 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
-                    success.accept(voteStorage.getPlayerVotes()
-                            .get(storageTimeout, TimeUnit.MILLISECONDS));
-                } catch (ExecutionException | TimeoutException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                    fail.accept(internalErrorMessage);
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                }
+                success.accept(voteStorage.getPlayerVotes());
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
@@ -236,10 +228,9 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
+//                try {
                     List<Vote> votes = voteStorage
-                            .getPlayerVotes(recipient.getUniqueId())
-                            .get(storageTimeout, TimeUnit.MILLISECONDS);
+                            .getPlayerVotes(recipient.getUniqueId());
                     if (votes == null && !applicationNeeded) {
                         voteStorage.apply(recipient);
                         //votes = voteStorage.getPlayerVotes(recipient.getUniqueId());
@@ -250,8 +241,7 @@ public class PluginData {
                     boolean withdrawPrevious = false;
                     if (!allowMultipleVoting) {
                         newWeight = Math.max(newWeight,
-                                voteStorage.getMaxWeight(voter, recipient)
-                                        .get(storageTimeout, TimeUnit.MILLISECONDS));
+                                voteStorage.getMaxWeight(voter, recipient));
                         //withdrawVote_internal(voter, recipient);
                         withdrawPrevious = true;
                     }
@@ -266,12 +256,12 @@ public class PluginData {
                             updateXpBar(recipient, score, true);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
-                } catch (InterruptedException ex) {
+              /*  } catch (InterruptedException ex) {
                     Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
                 } catch (ExecutionException | TimeoutException ex) {
                     Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
                     messageUtil.sendErrorMessage(voter, internalErrorMessage);
-                }
+                }*/
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
@@ -280,21 +270,14 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
-                    voteStorage.withdrawVote(voter, recipient);
-                    double score = calculateScore(recipient.getUniqueId());
-                    new BukkitRunnable() {
-                        @Override
-                        public void run() {
-                            updateXpBar(recipient, score, true);
-                        }
-                    }.runTask(CommonerVotePlugin.getPluginInstance());
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                } catch (ExecutionException | TimeoutException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                    messageUtil.sendErrorMessage(voter, internalErrorMessage);
-                }
+                voteStorage.withdrawVote(voter, recipient);
+                double score = calculateScore(recipient.getUniqueId());
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        updateXpBar(recipient, score, true);
+                    }
+                }.runTask(CommonerVotePlugin.getPluginInstance());
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
@@ -305,15 +288,7 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
-                    success.accept(voteStorage.hasVoted(voter, recipient)
-                            .get(storageTimeout, TimeUnit.MILLISECONDS));
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                } catch (ExecutionException | TimeoutException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                    fail.accept(internalErrorMessage);
-                }
+                success.accept(voteStorage.hasVoted(voter, recipient));
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
@@ -322,21 +297,13 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
-                    success.accept(calculateScore(player));
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                } catch (ExecutionException | TimeoutException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                    fail.accept(internalErrorMessage);
-                }
+                success.accept(calculateScore(player));
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
 
-    private static double calculateScore(UUID player)
-            throws InterruptedException, ExecutionException, TimeoutException {
-        List<Vote> votes = voteStorage.getPlayerVotes(player).get(storageTimeout, TimeUnit.MILLISECONDS);
+    private static double calculateScore(UUID player) {
+        List<Vote> votes = voteStorage.getPlayerVotes(player);
         return calculateScore(votes);
     }
 
@@ -466,7 +433,7 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
+//                try {
                     voteStorage.clearVotes(player);
                     double score = calculateScore(player.getUniqueId());
                     new BukkitRunnable() {
@@ -475,12 +442,12 @@ public class PluginData {
                             updateXpBar(player, score, true);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
-                } catch (InterruptedException ex) {
+            /*    } catch (InterruptedException ex) {
                     Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
                 } catch (ExecutionException | TimeoutException ex) {
                     Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
                     fail.accept(internalErrorMessage);
-                }
+                }*/
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
@@ -491,15 +458,7 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
-                    success.accept(voteStorage.getPlayerVotes(player.getUniqueId())
-                            .get(storageTimeout, TimeUnit.MILLISECONDS));
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                } catch (ExecutionException | TimeoutException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                    fail.accept(internalErrorMessage);
-                }
+                success.accept(voteStorage.getPlayerVotes(player.getUniqueId()));
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
@@ -510,15 +469,7 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
-                    success.accept(voteStorage.hasApplied(player)
-                            .get(storageTimeout, TimeUnit.MILLISECONDS));
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                } catch (ExecutionException | TimeoutException ex) {
-                    Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                    fail.accept(internalErrorMessage);
-                }
+                success.accept(voteStorage.hasApplied(player));
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }
@@ -527,7 +478,7 @@ public class PluginData {
         new BukkitRunnable() {
             @Override
             public void run() {
-                try {
+//                try {
                     double score = calculateScore(player.getUniqueId());
                     new BukkitRunnable() {
                         @Override
@@ -536,12 +487,12 @@ public class PluginData {
                             updateXpBar(player, score, bungeeUpdate);
                         }
                     }.runTask(CommonerVotePlugin.getPluginInstance());
-                } catch (InterruptedException ex) {
+             /*   } catch (InterruptedException ex) {
                     Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
                 } catch (ExecutionException | TimeoutException ex) {
                     messageUtil.sendErrorMessage(player, internalErrorMessage);
                     Logger.getLogger(PluginData.class.getName()).log(Level.SEVERE, null, ex);
-                }
+                }*/
             }
         }.runTaskAsynchronously(CommonerVotePlugin.getPluginInstance());
     }

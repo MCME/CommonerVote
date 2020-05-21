@@ -45,8 +45,6 @@ public class FileVoteStorage implements VoteStorage{
     
     private final File dataFile;
     
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    
     public FileVoteStorage(File dataFile) {
         this.dataFile = dataFile;
         load();
@@ -83,13 +81,13 @@ public class FileVoteStorage implements VoteStorage{
     }
 
     @Override
-    public Future<Map<UUID, List<Vote>>> getPlayerVotes() {
-        return executor.submit(() -> playerVotes);
+    public Map<UUID, List<Vote>> getPlayerVotes() {
+        return playerVotes;
     }
     
     @Override
-    public Future<List<Vote>> getPlayerVotes(UUID player) {
-        return executor.submit(()->playerVotes.get(player));
+    public List<Vote> getPlayerVotes(UUID player) {
+        return playerVotes.get(player);
     }
     
     @Override
@@ -133,35 +131,31 @@ public class FileVoteStorage implements VoteStorage{
     }
 
     @Override
-    public Future<Boolean> hasVoted(Player voter, OfflinePlayer recipient) {
-        return executor.submit(()-> {
-            List<Vote> votes = playerVotes.get(recipient.getUniqueId());
+    public boolean hasVoted(Player voter, OfflinePlayer recipient) {
+        List<Vote> votes = playerVotes.get(recipient.getUniqueId());
 //Logger.getGlobal().info("Has Voted!!");
-            if(votes!=null) {
-                for(Vote vote: votes) {
-                    if(vote.getVoter().equals(voter.getUniqueId())) {
+        if(votes!=null) {
+            for(Vote vote: votes) {
+                if(vote.getVoter().equals(voter.getUniqueId())) {
 //Logger.getGlobal().info("Has Voted!! -> true");
-                        return true;
-                    }
+                    return true;
                 }
             }
+        }
 //Logger.getGlobal().info("Has Voted!! -> false");
-            return false;
-        });
+        return false;
     }
 
     @Override
-    public Future<Double> getMaxWeight(Player voter, OfflinePlayer recipient) {
-        return executor.submit(()->{
-            List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
-            double result = 0;
-            if(votes!=null) {
-                for(Vote vote: votes) {
-                    result = Math.max(result, vote.getWeight());
-                }
+    public double getMaxWeight(Player voter, OfflinePlayer recipient) {
+        List<Vote> votes = playerVotes.get(recipient.getUniqueId());        
+        double result = 0;
+        if(votes!=null) {
+            for(Vote vote: votes) {
+                result = Math.max(result, vote.getWeight());
             }
-            return result;
-        });
+        }
+        return result;
     }
 
     @Override
@@ -171,13 +165,13 @@ public class FileVoteStorage implements VoteStorage{
     }
 
     @Override
-    public Future<Boolean> hasApplied(OfflinePlayer player) {
-        return executor.submit(()->playerVotes.containsKey(player.getUniqueId()));
+    public boolean hasApplied(OfflinePlayer player) {
+        return playerVotes.containsKey(player.getUniqueId());
     }
 
     @Override
-    public Future<Iterable<UUID>> getPlayers() {
-        return executor.submit(()->playerVotes.keySet());
+    public Iterable<UUID> getPlayers() {
+        return playerVotes.keySet();
     }
 
     @Override
