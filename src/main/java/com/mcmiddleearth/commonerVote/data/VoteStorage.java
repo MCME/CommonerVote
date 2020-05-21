@@ -19,7 +19,6 @@ package com.mcmiddleearth.commonerVote.data;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Future;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
@@ -31,9 +30,9 @@ public interface VoteStorage {
 
     public void disconnect();
     
-    public Future<Map<UUID, List<Vote>>> getPlayerVotes();
+    public Map<UUID, List<Vote>> getPlayerVotes();
     
-    public Future<List<Vote>> getPlayerVotes(UUID recipient);
+    public List<Vote> getPlayerVotes(UUID recipient);
 
     public void apply(OfflinePlayer player);
 
@@ -41,15 +40,15 @@ public interface VoteStorage {
 
     public void withdrawVote(Player voter, OfflinePlayer recipient);
 
-    public Future<Boolean> hasVoted(Player voter, OfflinePlayer recipient);
+    public boolean hasVoted(Player voter, OfflinePlayer recipient);
 
-    public Future<Double> getMaxWeight(Player voter, OfflinePlayer recipient);
+    public double getMaxWeight(Player voter, OfflinePlayer recipient);
 
     public void clearVotes(OfflinePlayer player);
 
-    public Future<Boolean> hasApplied(OfflinePlayer player);
+    public boolean hasApplied(OfflinePlayer player);
 
-    public Future<Iterable<UUID>> getPlayers();
+    public Iterable<UUID> getPlayers();
 
     public void clearOldVotes();
 

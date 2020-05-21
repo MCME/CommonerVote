@@ -28,11 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.MemoryConfiguration;
@@ -71,8 +69,6 @@ public class DatabaseVoteStorage implements VoteStorage{
     
     private BukkitTask keepAliveTask;
     
-    private ExecutorService executor = Executors.newSingleThreadExecutor();
-    
     public DatabaseVoteStorage(ConfigurationSection config) {
         if(config==null) {
             config = new MemoryConfiguration();
@@ -88,11 +84,13 @@ public class DatabaseVoteStorage implements VoteStorage{
             @Override
             public void run() {
                 checkConnection();
+Logger.getGlobal().info("ComonerVoteTasks: "+Bukkit.getScheduler().getPendingTasks().stream().filter(task -> task.getOwner().equals(CommonerVotePlugin.getPluginInstance())).count());
+Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWorkers().stream().filter(task -> task.getOwner().equals(CommonerVotePlugin.getPluginInstance())).count());
             }
         }.runTaskTimerAsynchronously(CommonerVotePlugin.getPluginInstance(), 0, 1200);
     }
     
-    public final boolean checkConnection() {
+    private boolean checkConnection() {
         try {
             if(connected && dbConnection.isValid(5)) {
                 CommonerVotePlugin.getPluginInstance().getLogger().log(Level.INFO,
@@ -176,54 +174,50 @@ public class DatabaseVoteStorage implements VoteStorage{
     }
     
     @Override
-    public Future<Map<UUID, List<Vote>>> getPlayerVotes() {
-        return executor.submit(()-> {
-            Map<UUID, List<Vote>> resultMap = new HashMap<>();
-            try {
-                getVotes.setFetchSize(5000);
-                ResultSet result = getVotes.executeQuery();
-                if(result.first()) {
-                    List<Vote> votes = new ArrayList<>();
-                    String recipient = result.getString("recipient");
-                    do {
-                        if(!recipient.equals(result.getString("recipient"))) {
-                           resultMap.put(UUID.fromString(recipient), votes);
-                           recipient = result.getString("recipient");
-                           votes = new ArrayList<>();
-                        }
-                        votes.add(new Vote(UUID.fromString(result.getString("voter")),
-                                           result.getDouble("weight"),
-                                           result.getLong("timestamp"),
-                                           result.getString("reason")));
-                        
-                    } while(result.next());
-                }
-            } catch (SQLException ex) {
-                Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
-            }
-            return resultMap;
-        });
-    }
-
-    @Override
-    public Future<List<Vote>> getPlayerVotes(UUID player) {
-        return executor.submit(()-> {
-            List<Vote> resultList = new ArrayList<>();
-            try {
-                getPlayerVotes.setFetchSize(100);
-                getPlayerVotes.setString(1, player.toString());
-                ResultSet result = getPlayerVotes.executeQuery();
-                while(result.next()) {
-                    resultList.add(new Vote(UUID.fromString(result.getString("voter")),
+    public Map<UUID, List<Vote>> getPlayerVotes() {
+        Map<UUID, List<Vote>> resultMap = new HashMap<>();
+        try {
+            getVotes.setFetchSize(5000);
+            ResultSet result = getVotes.executeQuery();
+            if(result.first()) {
+                List<Vote> votes = new ArrayList<>();
+                String recipient = result.getString("recipient");
+                do {
+                    if(!recipient.equals(result.getString("recipient"))) {
+                       resultMap.put(UUID.fromString(recipient), votes);
+                       recipient = result.getString("recipient");
+                       votes = new ArrayList<>();
+                    }
+                    votes.add(new Vote(UUID.fromString(result.getString("voter")),
                                        result.getDouble("weight"),
                                        result.getLong("timestamp"),
                                        result.getString("reason")));
-                }
-            } catch (SQLException ex) {
-                Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+
+                } while(result.next());
             }
-            return resultList;
-        });
+        } catch (SQLException ex) {
+            Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return resultMap;
+    }
+
+    @Override
+    public List<Vote> getPlayerVotes(UUID player) {
+        List<Vote> resultList = new ArrayList<>();
+        try {
+            getPlayerVotes.setFetchSize(100);
+            getPlayerVotes.setString(1, player.toString());
+            ResultSet result = getPlayerVotes.executeQuery();
+            while(result.next()) {
+                resultList.add(new Vote(UUID.fromString(result.getString("voter")),
+                                   result.getDouble("weight"),
+                                   result.getLong("timestamp"),
+                                   result.getString("reason")));
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return resultList;
     }
 
     @Override
@@ -263,37 +257,33 @@ public class DatabaseVoteStorage implements VoteStorage{
     }
 
     @Override
-    public Future<Boolean> hasVoted(Player voter, OfflinePlayer recipient) {
-        return executor.submit(()-> {
-            try {
-                hasVoted.setString(1, voter.getUniqueId().toString());
-                hasVoted.setString(2, recipient.getUniqueId().toString());
-                ResultSet result = hasVoted.executeQuery();
-                return result.first();
-            } catch (SQLException ex) {
-                Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
-                return false;
-            }
-        });
+    public boolean hasVoted(Player voter, OfflinePlayer recipient) {
+        try {
+            hasVoted.setString(1, voter.getUniqueId().toString());
+            hasVoted.setString(2, recipient.getUniqueId().toString());
+            ResultSet result = hasVoted.executeQuery();
+            return result.first();
+        } catch (SQLException ex) {
+            Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+            return false;
+        }
     }
 
     @Override
-    public Future<Double> getMaxWeight(Player voter, OfflinePlayer recipient) {
-        return executor.submit(()-> {
-            try {
-                maxWeight.setString(1, voter.getUniqueId().toString());
-                maxWeight.setString(2, recipient.getUniqueId().toString());
-                ResultSet result = maxWeight.executeQuery();
-                if(result.first()) {
-                    return result.getDouble(1);
-                } else {
-                    return 0d;
-                }
-            } catch (SQLException ex) {
-                Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+    public double getMaxWeight(Player voter, OfflinePlayer recipient) {
+        try {
+            maxWeight.setString(1, voter.getUniqueId().toString());
+            maxWeight.setString(2, recipient.getUniqueId().toString());
+            ResultSet result = maxWeight.executeQuery();
+            if(result.first()) {
+                return result.getDouble(1);
+            } else {
+                return 0d;
             }
-            return 0d;
-        });
+        } catch (SQLException ex) {
+            Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return 0d;
     }
 
     @Override
@@ -307,25 +297,23 @@ public class DatabaseVoteStorage implements VoteStorage{
     }
 
     @Override
-    public Future<Boolean> hasApplied(OfflinePlayer player) {
-        return executor.submit(()->true);
+    public boolean hasApplied(OfflinePlayer player) {
+        return true;
     }
 
     @Override
-    public Future<Iterable<UUID>> getPlayers() {
-        return executor.submit(()-> {
-            Set<UUID> resultSet = new HashSet<>();
-            try {
-                getPlayers.setFetchSize(5000);
-                ResultSet result = getPlayers.executeQuery();
-                while(result.next()) {
-                    resultSet.add(UUID.fromString(result.getString(1)));
-                }
-            } catch (SQLException ex) {
-                Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+    public Iterable<UUID> getPlayers() {
+        Set<UUID> resultSet = new HashSet<>();
+        try {
+            getPlayers.setFetchSize(5000);
+            ResultSet result = getPlayers.executeQuery();
+            while(result.next()) {
+                resultSet.add(UUID.fromString(result.getString(1)));
             }
-            return resultSet;
-        });
+        } catch (SQLException ex) {
+            Logger.getLogger(DatabaseVoteStorage.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return resultSet;
     }
 
     @Override
