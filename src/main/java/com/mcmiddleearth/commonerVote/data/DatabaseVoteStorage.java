@@ -122,22 +122,31 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
             
             addVote = dbConnection
                 .prepareStatement("INSERT INTO commonervote_votes VALUES (?,?,?,?,?)");
+            addVote.setQueryTimeout(10);
             withdrawVote = dbConnection
                 .prepareStatement("DELETE FROM commonervote_votes WHERE voter = ? AND recipient = ?");
+            withdrawVote.setQueryTimeout(10);
             clearPlayerVotes = dbConnection
                 .prepareStatement("DELETE FROM commonervote_votes WHERE recipient = ?");
+            clearPlayerVotes.setQueryTimeout(10);
             clearOldVotes = dbConnection
                 .prepareStatement("DELETE FROM commonervote_votes WHERE timestamp < ?");
+            clearOldVotes.setQueryTimeout(10);
             getVotes = dbConnection
                 .prepareStatement("SELECT * FROM commonervote_votes ORDER BY recipient");
+            getVotes.setQueryTimeout(10);
             getPlayers = dbConnection
                 .prepareStatement("SELECT DISTINCT recipient FROM commonervote_votes");
+            getPlayers.setQueryTimeout(10);
             getPlayerVotes = dbConnection
                 .prepareStatement("SELECT * FROM commonervote_votes WHERE recipient = ?");
+            getPlayerVotes.setQueryTimeout(10);
             hasVoted = dbConnection
                 .prepareStatement("SELECT voter FROM commonervote_votes WHERE voter = ? AND recipient = ?");
+            hasVoted.setQueryTimeout(10);
             maxWeight = dbConnection
                 .prepareStatement("SELECT MAX(weight) FROM commonervote_votes WHERE voter = ? AND recipient = ?");
+            maxWeight.setQueryTimeout(10);
             connected = true;
         } catch (SQLException ex) {
             if (dbConnection != null) {
@@ -174,7 +183,7 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
     
     @Override
-    public Map<UUID, List<Vote>> getPlayerVotes() {
+    public synchronized Map<UUID, List<Vote>> getPlayerVotes() {
         Map<UUID, List<Vote>> resultMap = new HashMap<>();
         try {
             getVotes.setFetchSize(5000);
@@ -202,7 +211,7 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public List<Vote> getPlayerVotes(UUID player) {
+    public synchronized List<Vote> getPlayerVotes(UUID player) {
         List<Vote> resultList = new ArrayList<>();
         try {
             getPlayerVotes.setFetchSize(100);
@@ -221,11 +230,11 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public void apply(OfflinePlayer player) {
+    public synchronized void apply(OfflinePlayer player) {
     }
 
     @Override
-    public void addVote(OfflinePlayer recipient, Vote vote, boolean withdrawPrevious) {
+    public synchronized void addVote(OfflinePlayer recipient, Vote vote, boolean withdrawPrevious) {
         try {
             if(withdrawPrevious) {
                 withdrawVote(vote.getVoter(),recipient);
@@ -242,11 +251,11 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public void withdrawVote(Player voter, OfflinePlayer recipient) {
+    public synchronized void withdrawVote(Player voter, OfflinePlayer recipient) {
         withdrawVote(voter.getUniqueId(),recipient);
     }
     
-    private void withdrawVote(UUID voter, OfflinePlayer recipient) {
+    private synchronized void withdrawVote(UUID voter, OfflinePlayer recipient) {
         try {
             withdrawVote.setString(1, voter.toString());
             withdrawVote.setString(2, recipient.getUniqueId().toString());
@@ -257,7 +266,7 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public boolean hasVoted(Player voter, OfflinePlayer recipient) {
+    public synchronized boolean hasVoted(Player voter, OfflinePlayer recipient) {
         try {
             hasVoted.setString(1, voter.getUniqueId().toString());
             hasVoted.setString(2, recipient.getUniqueId().toString());
@@ -270,7 +279,7 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public double getMaxWeight(Player voter, OfflinePlayer recipient) {
+    public synchronized double getMaxWeight(Player voter, OfflinePlayer recipient) {
         try {
             maxWeight.setString(1, voter.getUniqueId().toString());
             maxWeight.setString(2, recipient.getUniqueId().toString());
@@ -287,7 +296,7 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public void clearVotes(OfflinePlayer player) {
+    public synchronized void clearVotes(OfflinePlayer player) {
         try {
             clearPlayerVotes.setString(1, player.getUniqueId().toString());
             clearPlayerVotes.executeUpdate();
@@ -297,12 +306,12 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public boolean hasApplied(OfflinePlayer player) {
+    public synchronized boolean hasApplied(OfflinePlayer player) {
         return true;
     }
 
     @Override
-    public Iterable<UUID> getPlayers() {
+    public synchronized Iterable<UUID> getPlayers() {
         Set<UUID> resultSet = new HashSet<>();
         try {
             getPlayers.setFetchSize(5000);
@@ -317,7 +326,7 @@ Logger.getGlobal().info("CommonerVoteWorker: "+Bukkit.getScheduler().getActiveWo
     }
 
     @Override
-    public void clearOldVotes() {
+    public synchronized void clearOldVotes() {
         try {
             clearOldVotes.setLong(1, System.currentTimeMillis()-PluginData.getStorageTime());
             clearOldVotes.executeUpdate();
