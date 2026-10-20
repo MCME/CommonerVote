@@ -330,6 +330,20 @@ class VoteCommandTest {
     }
 
     @Test
+    void a_candidate_suggested_by_uuid_is_found_by_it() throws SQLException {
+        PlayerMock admin = admin("Elrond");
+        UUID stranger = UUID.randomUUID(); // never here, and LuckPerms has no name for them
+        vote(UUID.randomUUID(), stranger);
+
+        assertEquals(List.of(stranger.toString()), tabComplete(admin, "vote review "));
+        admin.performCommand("vote review " + stranger);
+
+        ReviewDetailView detail = presenter.last(admin, ReviewDetailView.class);
+        assertNotNull(detail, "Brigadier takes the UUID as one word, and the service finds the player by it");
+        assertEquals(stranger.toString(), detail.name());
+    }
+
+    @Test
     void no_suggestions_without_permission() throws SQLException {
         PlayerMock guest = guest("Bilbo_B");
         PlayerMock team = teamMember("Gandalf");

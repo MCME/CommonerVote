@@ -17,6 +17,7 @@ import com.mcmiddleearth.commonervote.network.BungeeMessenger;
 import com.mcmiddleearth.commonervote.rank.LuckPermsRankService;
 import com.mcmiddleearth.commonervote.rank.RankService;
 import com.mcmiddleearth.commonervote.service.CommandRunner;
+import com.mcmiddleearth.commonervote.service.ProfileCache;
 import com.mcmiddleearth.commonervote.service.PromotionService;
 import com.mcmiddleearth.commonervote.service.ReviewService;
 import com.mcmiddleearth.commonervote.service.SettingsCache;
@@ -44,8 +45,8 @@ import net.luckperms.api.LuckPerms;
  * until it has succeeded), and never rebuilds the services.
  * <p>
  * The protected {@code create} methods are where the plugin meets the outside world (the database, its own threads,
- * LuckPerms, the dialogs and the console). A test subclass replaces them with an in-memory database, inline executors
- * and fakes. Not final, because MockBukkit subclasses the main class to load it in tests.
+ * LuckPerms, the dialogs, the console and Paper's profile cache). A test subclass replaces them with an in-memory
+ * database, inline executors and fakes. Not final, because MockBukkit subclasses the main class to load it in tests.
  */
 public class CommonerVotePlugin extends JavaPlugin {
 
@@ -84,6 +85,7 @@ public class CommonerVotePlugin extends JavaPlugin {
         Executor main = createMainExecutor();
         DialogPresenter presenter = createPresenter();
         CommandRunner commands = createCommandRunner();
+        ProfileCache profiles = createProfileCache();
         Logger logger = getLogger();
         LongSupplier clock = System::currentTimeMillis;
 
@@ -98,8 +100,10 @@ public class CommonerVotePlugin extends JavaPlugin {
                 (player, kind) -> promotion.onRemoteUpdate(player, kind));
         promotion = new PromotionService(db, main, votes, promotions, settings, ranks, messenger, presenter, xp,
                 commands, logger, clock);
-        voting = new VoteService(db, main, votes, settings, ranks, messenger, presenter, xp, promotion, clock);
-        reviewing = new ReviewService(db, main, votes, settings, ranks, messenger, presenter, xp, promotion, clock);
+        voting = new VoteService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
+                clock);
+        reviewing = new ReviewService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
+                clock);
         configuring = new SettingsService(db, main, settingsStore, settings, presenter);
         // Before anything can send: a send on a channel that is not registered throws.
         messenger.register();
@@ -202,6 +206,11 @@ public class CommonerVotePlugin extends JavaPlugin {
     /** Runs a command as the server console. */
     protected CommandRunner createCommandRunner() {
         return command -> getServer().dispatchCommand(getServer().getConsoleSender(), command);
+    }
+
+    /** The names Paper keeps in memory for players who are offline: its profile cache. */
+    protected ProfileCache createProfileCache() {
+        return ProfileCache.of(getServer());
     }
 
     /**

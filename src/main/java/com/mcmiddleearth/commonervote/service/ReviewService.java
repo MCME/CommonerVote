@@ -44,8 +44,8 @@ import net.kyori.adventure.text.Component;
  * String)}, {@link #promote(CommandSender, String)}).
  * <p>
  * A candidate is anyone with valid votes who is not recorded as promoted, online on this server or not, the closest
- * to a promotion first, at most 50 of them. The name shown for a player follows
- * {@link PlayerNames}: this server's spelling, else the rank service's, else the player's UUID.
+ * to a promotion first, at most 50 of them. The name shown for a player follows {@link PlayerNames}: the one this
+ * server holds in memory, else the rank service's, else the player's UUID, which can also be typed back.
  * <p>
  * The public methods are called on the main thread. Database work runs on the {@link DbExecutor}, the rank service
  * answers on its own threads, and every continuation that touches Bukkit comes back through {@code main} and checks
@@ -82,18 +82,19 @@ public final class ReviewService {
     private final LongSupplier clock;
 
     /**
-     * @param main  runs work on the server's main thread
-     * @param clock the time in epoch milliseconds
+     * @param main     runs work on the server's main thread
+     * @param profiles the names Paper keeps in memory for players who are offline
+     * @param clock    the time in epoch milliseconds
      */
     public ReviewService(DbExecutor db, Executor main, VoteStore votes, SettingsCache settings, RankService ranks,
-                         Messenger messenger, DialogPresenter presenter, XpBarService xp, PromotionService promotion,
-                         LongSupplier clock) {
+                         ProfileCache profiles, Messenger messenger, DialogPresenter presenter, XpBarService xp,
+                         PromotionService promotion, LongSupplier clock) {
         this.db = Objects.requireNonNull(db);
         this.main = Objects.requireNonNull(main);
         this.votes = Objects.requireNonNull(votes);
         this.settings = Objects.requireNonNull(settings);
         this.ranks = Objects.requireNonNull(ranks);
-        this.names = new PlayerNames(ranks, main);
+        this.names = new PlayerNames(ranks, profiles, main);
         this.continuations = new Continuations(main);
         this.messenger = Objects.requireNonNull(messenger);
         this.presenter = Objects.requireNonNull(presenter);

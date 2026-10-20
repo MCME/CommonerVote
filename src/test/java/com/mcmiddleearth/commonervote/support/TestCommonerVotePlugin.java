@@ -1,11 +1,13 @@
 package com.mcmiddleearth.commonervote.support;
 
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 
 import com.mcmiddleearth.commonervote.CommonerVotePlugin;
 import com.mcmiddleearth.commonervote.rank.RankService;
 import com.mcmiddleearth.commonervote.service.CommandRunner;
+import com.mcmiddleearth.commonervote.service.ProfileCache;
 import com.mcmiddleearth.commonervote.storage.ConnectionFactory;
 import com.mcmiddleearth.commonervote.storage.DatabaseConfig;
 import com.mcmiddleearth.commonervote.storage.DbExecutor;
@@ -13,8 +15,8 @@ import com.mcmiddleearth.commonervote.ui.DialogPresenter;
 
 /**
  * The real plugin with every outside dependency replaced: a fresh H2 database of its own, a database "thread" and a
- * main thread that both run work at once on the caller's thread, the fake LuckPerms, and recording dialogs and console.
- * Everything it logs is kept in {@link #log()}.
+ * main thread that both run work at once on the caller's thread, the fake LuckPerms, recording dialogs and console, and
+ * an empty profile cache. Everything it logs is kept in {@link #log()}.
  * <p>
  * Load it with {@code MockBukkit.loadWith(TestCommonerVotePlugin.class, description)}, the description read from the
  * filtered plugin.yml on the classpath. MockBukkit loads a generated subclass of it, so it must stay public and not
@@ -78,6 +80,15 @@ public class TestCommonerVotePlugin extends CommonerVotePlugin {
     @Override
     protected Executor createMainExecutor() {
         return Runnable::run;
+    }
+
+    /**
+     * An empty profile cache: MockBukkit cannot complete a profile from a cache, so names come from the players online
+     * and the fake LuckPerms.
+     */
+    @Override
+    protected ProfileCache createProfileCache() {
+        return player -> Optional.empty();
     }
 
     public CapturingLogger log() {

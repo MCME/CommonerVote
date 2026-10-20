@@ -2,6 +2,7 @@ package com.mcmiddleearth.commonervote.service;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -9,7 +10,6 @@ import java.util.concurrent.CompletableFuture;
 import org.bukkit.permissions.PermissionAttachment;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.command.ConsoleCommandSenderMock;
-import org.mockbukkit.mockbukkit.entity.OfflinePlayerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
@@ -174,18 +174,36 @@ class ReviewServiceTest extends ServiceTestBase {
         PlayerMock elrond = admin("Elrond");
         PlayerMock bilbo = guest("Bilbo_B");
         ranks.add(bilbo.getUniqueId(), "bilbo_b"); // LuckPerms keeps names in lowercase
+        UUID frodo = remoteGuest("frodo99");
+        cachedNames.put(frodo, "Frodo99"); // was on this server once
         UUID gimli = remoteGuest("gimli");
-        UUID stranger = UUID.randomUUID();
-        server.getPlayerList().addOfflinePlayer(new OfflinePlayerMock(stranger, null));
+        UUID stranger = UUID.randomUUID(); // nobody can name them
         vote(VOTER, bilbo.getUniqueId(), 0.6, 1);
+        vote(VOTER, frodo, 0.5, 1);
         vote(VOTER, gimli, 0.4, 1);
         vote(VOTER, stranger, 0.2, 1);
 
         reviewing.openList(elrond);
 
-        assertEquals(List.of("Bilbo_B 60 -", "gimli 40 -", stranger + " 20 -"),
+        assertEquals(List.of("Bilbo_B 60 -", "Frodo99 50 -", "gimli 40 -", stranger + " 20 -"),
                 rowsOf(presenter.last(elrond, ReviewListView.class)));
-        assertEquals(List.of("Bilbo_B", "gimli", stranger.toString()), reviewing.candidateNames().join());
+        assertEquals(List.of("Bilbo_B", "Frodo99", "gimli", stranger.toString()), reviewing.candidateNames().join());
+    }
+
+    @Test
+    void a_candidate_shown_by_uuid_can_be_typed_back() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+        ConsoleCommandSenderMock console = server.getConsoleSender();
+        UUID stranger = UUID.randomUUID(); // nobody can name them, so the list and the suggestions show the UUID
+        vote(VOTER, stranger, 0.2, 1);
+        String suggested = reviewing.candidateNames().join().get(0);
+
+        reviewing.openDetail(elrond, suggested);
+        reviewing.promote(console, suggested.toUpperCase(Locale.ROOT));
+
+        assertEquals(stranger.toString(), detailOf(elrond).name());
+        assertEquals(20, detailOf(elrond).percent());
+        assertEquals(List.of(promotionCommand(stranger)), commands.commands());
     }
 
     @Test
@@ -493,11 +511,11 @@ class ReviewServiceTest extends ServiceTestBase {
 
     @Test
     void the_command_names_an_offline_target_by_uuid() {
-        // Renamed since: this server shows the old name, LuckPerms knows the new one.
+        // Renamed since: this server's profile cache still has the old name, LuckPerms knows the new one.
         ConsoleCommandSenderMock console = server.getConsoleSender();
         UUID renamed = UUID.randomUUID();
         ranks.add(renamed, "newname");
-        server.getPlayerList().addOfflinePlayer(new OfflinePlayerMock(renamed, "OldName"));
+        cachedNames.put(renamed, "OldName");
 
         reviewing.promote(console, "newname");
 
@@ -713,8 +731,8 @@ class ReviewServiceTest extends ServiceTestBase {
         when(broken.names(any())).thenReturn(failed());
         when(broken.directGroups(any())).thenReturn(failed());
         when(broken.isExempt(any())).thenReturn(failed());
-        ReviewService service = new ReviewService(db, main, votes, settings, broken, messenger, presenter, xp,
-                promotion, () -> now);
+        ReviewService service = new ReviewService(db, main, votes, settings, broken, profiles, messenger, presenter,
+                xp, promotion, () -> now);
         PlayerMock elrond = admin("Elrond");
         ConsoleCommandSenderMock console = server.getConsoleSender();
         vote(VOTER, remoteGuest("Bilbo_B"), 0.4, 1);

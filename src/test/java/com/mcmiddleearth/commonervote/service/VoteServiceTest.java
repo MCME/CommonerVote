@@ -11,7 +11,6 @@ import java.util.concurrent.CompletableFuture;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.command.ConsoleCommandSenderMock;
-import org.mockbukkit.mockbukkit.entity.OfflinePlayerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
@@ -239,13 +238,12 @@ class VoteServiceTest extends ServiceTestBase {
     @Test
     void a_player_the_rank_service_cannot_name_shows_under_the_typed_name() {
         UUID gimli = UUID.randomUUID();
-        server.getPlayerList().addOfflinePlayer(new OfflinePlayerMock(gimli, null));
         RankService unnamed = mock(RankService.class);
         when(unnamed.lookup(any())).thenReturn(CompletableFuture.completedFuture(Optional.of(gimli)));
         when(unnamed.names(any())).thenReturn(CompletableFuture.completedFuture(Map.of()));
         when(unnamed.isExempt(any())).thenReturn(CompletableFuture.completedFuture(false));
-        VoteService service = new VoteService(db, main, votes, settings, unnamed, messenger, presenter, xp, promotion,
-                () -> now);
+        VoteService service = new VoteService(db, main, votes, settings, unnamed, profiles, messenger, presenter, xp,
+                promotion, () -> now);
         PlayerMock elrond = teamMember("Elrond");
 
         service.openVote(elrond, "Gimli");
@@ -645,8 +643,8 @@ class VoteServiceTest extends ServiceTestBase {
         when(broken.lookup(any())).thenReturn(failing(failure));
         when(broken.isExempt(any())).thenReturn(failing(failure));
         when(broken.names(any())).thenReturn(failing(failure));
-        VoteService service = new VoteService(db, main, votes, settings, broken, messenger, presenter, xp, promotion,
-                () -> now);
+        VoteService service = new VoteService(db, main, votes, settings, broken, profiles, messenger, presenter, xp,
+                promotion, () -> now);
         PlayerMock elrond = teamMember("Elrond");
         UUID offline = UUID.randomUUID();
         presenter.clear();

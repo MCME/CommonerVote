@@ -66,8 +66,10 @@ A rewrite for Paper 26.2 and Java 25. The votes table is unchanged, so every exi
 - The plugin declared `commonervote.voter` while the code checked `commonervote.vote`.
 - Two quick votes could promote a guest twice, because LuckPerms applies the promotion command late. The command also
   ran without a look at the player's other groups, and `parent set` then dropped them.
-- Looking up an offline player could block the main thread, and a player who had only been on another server was
-  reported as unknown.
+- Looking up an offline player could block the main thread: a typed name could make the server ask Mojang, and a name
+  shown was read from the player's data file on disk. Typed names are now looked up in LuckPerms off the main thread,
+  and the names shown come from memory or LuckPerms. A player who had only been on another server was also reported as
+  unknown.
 - Sending a message through the proxy while nobody was online threw a NullPointerException.
 - `/commonervote:vote` printed the usage instead of running.
 - Scores showed raw decimals such as `33.33333333333333%`.

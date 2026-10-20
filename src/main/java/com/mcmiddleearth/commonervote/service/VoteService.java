@@ -45,9 +45,9 @@ import net.kyori.adventure.text.Component;
  * that the player is still online before it does anything for them.
  * <p>
  * <b>Names.</b> A typed name is found among the players online here (in any case), then through the rank service,
- * which also knows players who were only ever on another server. The name shown and used from then on is this
- * server's own spelling when the server knows the player, and otherwise the rank service's. LuckPerms keeps names in
- * lowercase, so that is only the fallback. See {@link PlayerNames}.
+ * which also knows players who were only ever on another server. The name shown and used from then on is the one this
+ * server holds in memory (the player online here, or Paper's profile cache), and otherwise the rank service's.
+ * LuckPerms keeps names in lowercase, so that is only the fallback. See {@link PlayerNames}.
  * <p>
  * <b>Failures.</b> When a flow the player started fails because the database or the rank service cannot be reached,
  * the player is told {@link Messages#databaseDown()} and nothing else happens. The {@link DbExecutor} has already
@@ -73,17 +73,18 @@ public final class VoteService {
     private final LongSupplier clock;
 
     /**
-     * @param main  runs work on the server's main thread
-     * @param clock the time in epoch milliseconds
+     * @param main     runs work on the server's main thread
+     * @param profiles the names Paper keeps in memory for players who are offline
+     * @param clock    the time in epoch milliseconds
      */
     public VoteService(DbExecutor db, Executor main, VoteStore votes, SettingsCache settings, RankService ranks,
-                       Messenger messenger, DialogPresenter presenter, XpBarService xp, PromotionService promotion,
-                       LongSupplier clock) {
+                       ProfileCache profiles, Messenger messenger, DialogPresenter presenter, XpBarService xp,
+                       PromotionService promotion, LongSupplier clock) {
         this.db = Objects.requireNonNull(db);
         this.votes = Objects.requireNonNull(votes);
         this.settings = Objects.requireNonNull(settings);
         this.ranks = Objects.requireNonNull(ranks);
-        this.names = new PlayerNames(ranks, main);
+        this.names = new PlayerNames(ranks, profiles, main);
         this.continuations = new Continuations(main);
         this.messenger = Objects.requireNonNull(messenger);
         this.presenter = Objects.requireNonNull(presenter);

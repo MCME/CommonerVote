@@ -3,8 +3,10 @@ package com.mcmiddleearth.commonervote.support;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 
 import org.bukkit.plugin.Plugin;
@@ -12,11 +14,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
-import org.mockbukkit.mockbukkit.entity.OfflinePlayerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
 import com.mcmiddleearth.commonervote.domain.Settings;
+import com.mcmiddleearth.commonervote.service.ProfileCache;
 import com.mcmiddleearth.commonervote.service.PromotionService;
 import com.mcmiddleearth.commonervote.service.ReviewService;
 import com.mcmiddleearth.commonervote.service.SettingsCache;
@@ -70,6 +72,13 @@ public abstract class ServiceTestBase {
     protected final RecordingPresenter presenter = new RecordingPresenter();
     protected final RecordingMessenger messenger = new RecordingMessenger();
     protected final RecordingCommandRunner commands = new RecordingCommandRunner();
+    /**
+     * Paper's profile cache as the services see it, by player: the name of everyone who joined this server (see
+     * {@link #guest}). A test may add names, for a player who was here once.
+     */
+    protected final Map<UUID, String> cachedNames = new ConcurrentHashMap<>();
+    /** The services' profile cache, which reads {@link #cachedNames}. */
+    protected final ProfileCache profiles = player -> Optional.ofNullable(cachedNames.get(player));
 
     protected DbExecutor db;
     protected VoteStore votes;
@@ -116,8 +125,9 @@ public abstract class ServiceTestBase {
         xp = new XpBarService(settings::get);
         promotion = new PromotionService(db, main, votes, promotions, settings, ranks, messenger, presenter, xp,
                 commands, logger, () -> now);
-        voting = new VoteService(db, main, votes, settings, ranks, messenger, presenter, xp, promotion, () -> now);
-        reviewing = new ReviewService(db, main, votes, settings, ranks, messenger, presenter, xp, promotion,
+        voting = new VoteService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
+                () -> now);
+        reviewing = new ReviewService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
                 () -> now);
         configuring = new SettingsService(db, main, settingsStore, settings, presenter);
     }
@@ -150,10 +160,14 @@ public abstract class ServiceTestBase {
 
     // ---- players ----
 
-    /** A player online on this server with no permissions, known to the rank service under this name. */
+    /**
+     * A player online on this server with no permissions, known to the rank service under this name. Like Paper's,
+     * the profile cache keeps the name, also once the player has left.
+     */
     protected PlayerMock guest(String name) {
         PlayerMock player = server.addPlayer(name);
         ranks.add(player.getUniqueId(), name);
+        cachedNames.put(player.getUniqueId(), name);
         return player;
     }
 
@@ -180,13 +194,14 @@ public abstract class ServiceTestBase {
     }
 
     /**
-     * A player who is not on this server and whom it has never seen, known to the rank service only. Paper has no name
-     * for such a UUID, which the test server is told here (its own answer would be a made-up name).
+     * A player who is not on this server and whom it has never seen, known to the rank service only: neither the
+     * players online nor the profile cache know them. MockBukkit's {@code getOfflinePlayer(id).getName()} would make up
+     * a random name for them, so a service that read it (it must not: Paper reads the player's data file for it) would
+     * show that name and fail the test.
      */
     protected UUID remoteGuest(String name) {
         UUID id = UUID.randomUUID();
         ranks.add(id, name);
-        server.getPlayerList().addOfflinePlayer(new OfflinePlayerMock(id, null));
         return id;
     }
 
