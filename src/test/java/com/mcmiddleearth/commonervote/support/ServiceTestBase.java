@@ -18,6 +18,7 @@ import com.mcmiddleearth.commonervote.Permissions;
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.service.PromotionService;
 import com.mcmiddleearth.commonervote.service.SettingsCache;
+import com.mcmiddleearth.commonervote.service.VoteService;
 import com.mcmiddleearth.commonervote.service.XpBarService;
 import com.mcmiddleearth.commonervote.storage.ConnectionFactory;
 import com.mcmiddleearth.commonervote.storage.DbExecutor;
@@ -74,6 +75,7 @@ public abstract class ServiceTestBase {
     protected SettingsCache settings;
     protected XpBarService xp;
     protected PromotionService promotion;
+    protected VoteService voting;
 
     @BeforeEach
     protected void setUpServiceTestBase() throws SQLException {
@@ -94,7 +96,7 @@ public abstract class ServiceTestBase {
 
     /**
      * Builds the database executor (on {@code Runnable::run}), the stores on {@link #connections}, the settings cache,
-     * the XP bar service and the services on {@link #main}.
+     * the XP bar service and the services (promotion, voting) on {@link #main}.
      * <p>
      * The settings cache holds the settings stored in the test database, as after a reload, also when a test has
      * broken the {@link #connections} (as a server keeps its last settings while the database is down).
@@ -109,6 +111,7 @@ public abstract class ServiceTestBase {
         xp = new XpBarService(settings::get);
         promotion = new PromotionService(db, main, votes, promotions, settings, ranks, messenger, presenter, xp,
                 commands, logger, () -> now);
+        voting = new VoteService(db, main, votes, settings, ranks, messenger, presenter, xp, promotion, () -> now);
     }
 
     /** Makes every connection the services open fail, as when the database is down, and rebuilds the services. */
