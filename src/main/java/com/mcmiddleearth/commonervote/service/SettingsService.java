@@ -30,6 +30,9 @@ import com.mcmiddleearth.commonervote.ui.view.TextsView;
  * not what this server loaded up to a minute ago. A save writes all fifteen settings, so a stale cache would otherwise
  * undo what another server saved meanwhile. If the reload fails, the dialog opens with the cached settings: a possibly
  * stale dialog is better than none, and the {@link DbExecutor} has logged the failure. The admin is told nothing then.
+ * But if the settings have never loaded on this server ({@link SettingsCache#loaded()}), the cache holds only the
+ * defaults, and a save from them would overwrite every stored setting; the admin is then told
+ * {@link Messages#databaseDown()} instead, and no dialog opens.
  * <p>
  * <b>Saving.</b> The form is applied to the cached settings and the result is checked with {@link Settings#problems()}
  * before anything is written; a problem is answered with {@link Messages#settingsRejected} and nothing changes. A
@@ -98,10 +101,12 @@ public final class SettingsService {
 
     /**
      * The settings stored now, which the reload also puts in the cache; if they cannot be read, the cached settings.
-     * The future never fails.
+     * The future fails only when the reload fails and the cache has never loaded, so it holds just the defaults.
      */
     private CompletableFuture<Settings> reloaded() {
-        return cache.reload().exceptionally(error -> cache.get());
+        return cache.reload().exceptionallyCompose(error -> cache.loaded()
+                ? CompletableFuture.completedFuture(cache.get())
+                : CompletableFuture.failedFuture(error));
     }
 
     /** Checks and stores the settings the admin's form resulted in, and updates this server's cache. */

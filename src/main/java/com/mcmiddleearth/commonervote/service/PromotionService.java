@@ -114,14 +114,16 @@ public final class PromotionService {
     }
 
     /**
-     * Promotes {@code p} if auto-promotion is on, {@code score} is a whole promotion, {@code p} is not exempt, not
-     * already being promoted in this session and not promoted earlier in this server run, and the guard allows it. A
-     * guard refusal is logged once per player per session at INFO and does not hold the player: a later check (after
-     * a vote, say, or once the group was made promotable) tries again. The player did not ask for this check, so a
-     * failure is only logged, never shown to them.
+     * Promotes {@code p} if the settings have loaded (see {@link SettingsCache#loaded()}), auto-promotion is on,
+     * {@code score} is a whole promotion, {@code p} is not exempt, not already being promoted in this session and not
+     * promoted earlier in this server run, and the guard allows it. A guard refusal is logged once per player per
+     * session at INFO and does not hold the player: a later check (after a vote, say, or once the group was made
+     * promotable) tries again. The player did not ask for this check, so a failure is only logged, never shown to them.
+     * Before the settings have loaded, the check is skipped without a word: the default settings may not be the
+     * stored ones, and the next join or vote checks again.
      */
     public void checkAutoPromotion(Player p, double score) {
-        if (!settings.get().autoPromote() || !VoteMath.reachesPromotion(score)
+        if (!settings.loaded() || !settings.get().autoPromote() || !VoteMath.reachesPromotion(score)
                 || p.hasPermission(Permissions.EXEMPT)) {
             return;
         }
@@ -153,14 +155,19 @@ public final class PromotionService {
     /**
      * Promotes {@code target} at an admin's request, online or not, through the same guard as auto-promotion. The
      * admin is told the outcome: promoted; blocked by a group; already a Commoner (exempt, being promoted, or promoted
-     * earlier in this server run); or, when LuckPerms cannot be asked, the database being unreachable. A target who
-     * is online here sees the welcome at once; anyone else sees it at their next join on any server. Does not check
-     * the admin's permission: the caller has done that.
+     * earlier in this server run); or, when LuckPerms cannot be asked or the settings have never loaded on this
+     * server (see {@link SettingsCache#loaded()}), the database being unreachable. A target who is online here sees the
+     * welcome at once; anyone else sees it at their next join on any server. Does not check the admin's permission:
+     * the caller has done that.
      *
      * @param name the target's name, for the messages, the welcome and the announcement; the promotion command names
      *             the target by UUID
      */
     public void promoteNow(CommandSender admin, UUID target, String name) {
+        if (!settings.loaded()) {
+            admin.sendMessage(Messages.databaseDown()); // the default command and group may not be the stored ones
+            return;
+        }
         Object attempt = new Object();
         if (!claim(target, attempt)) {
             admin.sendMessage(Messages.targetExempt(name));

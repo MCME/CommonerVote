@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettingsServiceTest extends ServiceTestBase {
 
@@ -155,6 +156,37 @@ class SettingsServiceTest extends ServiceTestBase {
         assertEquals(cached, textsViewOf(elrond).current());
         assertNull(elrond.nextComponentMessage(), "a stale dialog is better than none; no databaseDown here");
         assertEquals(cached, settings.get());
+    }
+
+    @Test
+    void open_without_settings_ever_loaded_says_the_database_is_down() throws SQLException {
+        // Down since startup: the cache only has the defaults, and a save from them would overwrite every setting.
+        neverLoadSettings();
+        breakDatabase();
+        PlayerMock elrond = admin("Elrond");
+        presenter.clear();
+
+        configuring.open(elrond);
+        configuring.openTexts(elrond);
+
+        assertEquals(Messages.databaseDown(), elrond.nextComponentMessage());
+        assertEquals(Messages.databaseDown(), elrond.nextComponentMessage());
+        assertNull(elrond.nextComponentMessage());
+        assertNull(presenter.last(elrond, SettingsView.class), "no dialog filled with the defaults");
+        assertNull(presenter.last(elrond, TextsView.class));
+    }
+
+    @Test
+    void open_without_settings_ever_loaded_loads_them_first() throws SQLException {
+        Settings theirs = Settings.defaults().withNumbers(new SettingsForm(8, 40, 3, 2, false, true, false));
+        new SettingsStore(database).save(theirs);
+        neverLoadSettings();
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.open(elrond);
+
+        assertEquals(theirs, settingsViewOf(elrond).current());
+        assertTrue(settings.loaded());
     }
 
     // ---- saving the numbers and switches ----

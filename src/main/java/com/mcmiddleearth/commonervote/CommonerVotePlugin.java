@@ -110,7 +110,8 @@ public class CommonerVotePlugin extends JavaPlugin {
 
         // The setup and then the reload, both on the one database thread, which runs them in that order. The reload
         // does not depend on the setup: if the setup fails, it still loads whatever settings can be read. Until a
-        // reload succeeds, the cache holds the default settings. The executor logs every failure.
+        // reload succeeds, the cache holds the default settings and says it has not loaded, so nobody is promoted and
+        // the settings dialogs do not open on them. The executor logs every failure.
         AtomicBoolean setUpDone = new AtomicBoolean();
         Runnable setUp = () -> db.supply(() -> {
             Schema.create(connections);

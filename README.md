@@ -60,7 +60,8 @@ Everything is done with Paper dialogs and chat. Version 2.0 is a rewrite for Pap
 
 If the database is down when the server starts, the plugin keeps retrying once a minute. While it is down, a player who
 uses a vote command is told "The vote database is unreachable. Try again in a minute." and the log gets a WARNING line
-for each failure, with a stack trace at most once a minute.
+for each failure, with a stack trace at most once a minute. Until the server has read the [settings](#settings) once,
+nobody is promoted and `/vote config` does not open, since the defaults may not be what is stored.
 
 ## Commands
 

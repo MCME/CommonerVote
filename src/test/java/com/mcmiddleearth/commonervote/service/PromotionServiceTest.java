@@ -259,6 +259,39 @@ class PromotionServiceTest extends ServiceTestBase {
         assertEquals(List.of(), commands.commands());
     }
 
+    @Test
+    void no_promotion_before_the_settings_have_loaded() throws SQLException {
+        // The database has been down since startup: the cache holds the defaults, which may not be what is stored
+        // (autoPromote off, another command or group), so they must not promote anyone.
+        neverLoadSettings();
+        PlayerMock elrond = staff("Elrond");
+        PlayerMock bilbo = guest("Bilbo_B");
+        scoreOf(bilbo, 1.0);
+        UUID frodo = UUID.randomUUID();
+        ranks.add(frodo, "Frodo99");
+        presenter.clear();
+
+        promotion.checkAutoPromotion(bilbo, 1.0);
+        promotion.onJoin(bilbo);
+        promotion.promoteNow(elrond, frodo, "Frodo99");
+
+        assertEquals(List.of(), commands.commands());
+        assertEquals(Optional.empty(), promotionOf(bilbo.getUniqueId()));
+        assertEquals(Optional.empty(), promotionOf(frodo));
+        assertNull(presenter.last(bilbo, WelcomeView.class));
+        assertEquals(List.of(), messenger.announcements());
+        assertNull(bilbo.nextComponentMessage(), "the auto-check is silent");
+        assertEquals(Messages.databaseDown(), elrond.nextComponentMessage(), "the admin is told");
+        assertNull(elrond.nextComponentMessage());
+
+        settings.reload().join();
+        promotion.checkAutoPromotion(bilbo, 1.0);
+        promotion.promoteNow(elrond, frodo, "Frodo99");
+
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId()), promotionCommand(frodo)), commands.commands(),
+                "once loaded, the same calls promote");
+    }
+
     // ---- promote now ----
 
     @Test

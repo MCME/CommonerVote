@@ -65,6 +65,8 @@ public abstract class ServiceTestBase {
     protected Executor main;
     /** The current time of the services, in epoch milliseconds. */
     protected long now = NOW;
+    /** Whether {@link #build()} fills the settings cache; see {@link #neverLoadSettings()}. */
+    private boolean settingsLoaded = true;
 
     /** Everything the services and the database executor log. */
     protected final CapturingLogger logger = CapturingLogger.create();
@@ -113,7 +115,8 @@ public abstract class ServiceTestBase {
      * the XP bar service and the services (promotion, voting, reviewing, configuring) on {@link #main}.
      * <p>
      * The settings cache holds the settings stored in the test database, as after a reload, also when a test has
-     * broken the {@link #connections} (as a server keeps its last settings while the database is down).
+     * broken the {@link #connections} (as a server keeps its last settings while the database is down); after
+     * {@link #neverLoadSettings()} it holds the defaults and has never loaded.
      */
     protected void build() throws SQLException {
         db = new DbExecutor(Runnable::run, logger, () -> now);
@@ -121,7 +124,9 @@ public abstract class ServiceTestBase {
         promotions = new PromotionStore(connections);
         settingsStore = new SettingsStore(connections);
         settings = new SettingsCache(db, settingsStore, logger);
-        settings.replace(storedSettings());
+        if (settingsLoaded) {
+            settings.replace(storedSettings());
+        }
         xp = new XpBarService(settings::get);
         promotion = new PromotionService(db, main, votes, promotions, settings, ranks, messenger, presenter, xp,
                 commands, logger, () -> now);
@@ -130,6 +135,16 @@ public abstract class ServiceTestBase {
         reviewing = new ReviewService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
                 () -> now);
         configuring = new SettingsService(db, main, settingsStore, settings, presenter);
+    }
+
+    /**
+     * Rebuilds the services on a settings cache that has never loaded, as on a server whose database has been down
+     * since it started: {@link SettingsCache#loaded()} is false and the cache holds the defaults. Later rebuilds keep
+     * it that way.
+     */
+    protected void neverLoadSettings() throws SQLException {
+        settingsLoaded = false;
+        build();
     }
 
     /** Makes every connection the services open fail, as when the database is down, and rebuilds the services. */

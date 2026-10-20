@@ -111,6 +111,30 @@ class SettingsCacheTest {
     }
 
     @Test
+    void loaded_after_the_first_successful_reload() throws Exception {
+        assertFalse(cache.loaded(), "the defaults are not loaded settings");
+
+        databaseDown.set(true);
+        assertThrows(ExecutionException.class, () -> cache.reload().get());
+        assertFalse(cache.loaded(), "a failed reload loads nothing");
+
+        databaseDown.set(false);
+        cache.reload().get();
+        assertTrue(cache.loaded());
+
+        databaseDown.set(true);
+        assertThrows(ExecutionException.class, () -> cache.reload().get());
+        assertTrue(cache.loaded(), "once loaded, the cache keeps serving what it loaded");
+    }
+
+    @Test
+    void loaded_after_a_replace() {
+        cache.replace(Settings.defaults());
+
+        assertTrue(cache.loaded(), "this server saved them, so they are the stored settings");
+    }
+
+    @Test
     void replace_sets_what_get_returns() {
         Settings edited = Settings.defaults().withNumbers(new SettingsForm(
                 7, 30, 3, 2, false, false, false));

@@ -17,7 +17,8 @@ import com.mcmiddleearth.commonervote.storage.SettingsStore;
  * <p>
  * {@link #get()} can be called from any thread and never blocks. It gives {@link Settings#defaults()} until the
  * first load has finished, and the last settings that loaded (or were handed to {@link #replace}) after that, also
- * while the database is down.
+ * while the database is down. The defaults may not be what is stored, so {@link #loaded()} tells the flows that must
+ * not act on them (a promotion, the settings dialogs) whether real settings have arrived yet.
  * <p>
  * What is wrong with the stored settings is logged as a WARNING, once per server run for each distinct message, so a
  * timer reloading every minute does not repeat it. The settings are used all the same: an unusable value has already
@@ -31,6 +32,7 @@ public final class SettingsCache {
     private final Logger logger;
 
     private volatile Settings current = Settings.defaults();
+    private volatile boolean loadedOnce;
     private final Set<String> warned = ConcurrentHashMap.newKeySet();
 
     public SettingsCache(DbExecutor db, SettingsStore store, Logger logger) {
@@ -41,6 +43,15 @@ public final class SettingsCache {
 
     public Settings get() {
         return current;
+    }
+
+    /**
+     * Whether {@link #get()} gives settings from the database: true once a {@link #reload()} has succeeded or settings
+     * were handed to {@link #replace}, and from then on, also while the database is down again. False while
+     * {@link #get()} still gives the defaults.
+     */
+    public boolean loaded() {
+        return loadedOnce;
     }
 
     /**
@@ -58,6 +69,7 @@ public final class SettingsCache {
                 warnOnce("Stored setting problem: " + problem);
             }
             current = loaded;
+            loadedOnce = true;
             return loaded;
         });
     }
@@ -65,6 +77,7 @@ public final class SettingsCache {
     /** Makes {@code s} the cached settings, for after this server saved them itself. */
     public void replace(Settings s) {
         current = Objects.requireNonNull(s);
+        loadedOnce = true;
     }
 
     private void warnOnce(String message) {
