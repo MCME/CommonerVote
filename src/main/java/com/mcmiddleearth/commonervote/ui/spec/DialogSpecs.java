@@ -2,6 +2,7 @@ package com.mcmiddleearth.commonervote.ui.spec;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -59,6 +60,8 @@ public final class DialogSpecs {
     static final int SHORT_TEXT_LENGTH = 256;
     /** The longest guest info, welcome or announcement text. */
     static final int LONG_TEXT_LENGTH = 1024;
+    /** How long the buttons of the settings dialogs work: editing the long texts can take a while. */
+    static final Duration EDITING_CLICK_LIFETIME = Duration.ofMinutes(30);
 
     private static final ButtonSpec CLOSE = closing("Close");
     private static final ButtonSpec CANCEL = closing("Cancel");
@@ -184,7 +187,7 @@ public final class DialogSpecs {
                 v.toggle("auto_promote"), v.toggle("xp_bar"), v.toggle("broadcast_network"))));
         return new DialogSpec(text("Vote settings"), List.of(text("A save reaches every server within a minute.")),
                 inputs, List.of(button("Save for all servers", save), button("Texts and links…",
-                        click(view.onTexts()))), CANCEL, 2);
+                        click(view.onTexts()))), CANCEL, 2, EDITING_CLICK_LIFETIME);
     }
 
     /** The groups, the promotion command, the links and the three texts of the shared settings. */
@@ -206,7 +209,7 @@ public final class DialogSpecs {
         return new DialogSpec(text("Texts and links"), List.of(
                 text("The promotion command may use <player> and <group>."),
                 text("The three texts are MiniMessage and may use <player>, <votes_needed> and <validity_days>.")),
-                inputs, List.of(button("Save for all servers", save)), closing("Back"), 1);
+                inputs, List.of(button("Save for all servers", save)), closing("Back"), 1, EDITING_CLICK_LIFETIME);
     }
 
     // ---- helpers ----

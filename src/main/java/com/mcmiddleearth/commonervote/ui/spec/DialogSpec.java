@@ -1,5 +1,6 @@
 package com.mcmiddleearth.commonervote.ui.spec;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -15,22 +16,32 @@ import net.kyori.adventure.text.Component;
  * sees and every click can be tested without a server, which cannot build Paper dialogs in tests.
  * <p>
  * The records refuse what Paper refuses when it builds a dialog: an input key other than lowercase letters, digits and
- * {@code _}, a text longer than its text box, a slider value outside its range. A bad spec then fails in a unit test,
- * not in front of a player. Clamping and trimming stored values is {@link DialogSpecs}' job.
+ * {@code _}, a text longer than its text box, a slider value outside its range. They also refuse the input key
+ * {@code id}: Paper keeps a callback's own id under that name in the click's payload, and Minecraft writes every input
+ * into the same payload, so an input {@code id} would silently break every button of its dialog. A bad spec then fails
+ * in a unit test, not in front of a player. Clamping and trimming stored values is {@link DialogSpecs}' job.
  *
  * @param title   the title at the top
  * @param body    the lines above the inputs, in order, each its own paragraph; immutable
  * @param inputs  the inputs, in order; immutable
  * @param buttons the action buttons, in order; immutable. Without any, the dialog is a notice whose only button is
  *                {@code exit}, since Minecraft refuses a button list without buttons.
- * @param exit    the button at the bottom, which the Escape key also runs
- * @param columns how many action buttons sit side by side, at least 1
+ * @param exit          the button at the bottom, which the Escape key also runs
+ * @param columns       how many action buttons sit side by side, at least 1
+ * @param clickLifetime how long after the dialog was shown its {@link ButtonAction.Callback} buttons still work;
+ *                      a later click does nothing. Positive.
  */
 public record DialogSpec(Component title, List<Component> body, List<InputSpec> inputs, List<ButtonSpec> buttons,
-                         ButtonSpec exit, int columns) {
+                         ButtonSpec exit, int columns, Duration clickLifetime) {
+
+    /** How long the buttons of a dialog work unless it says otherwise. */
+    public static final Duration DEFAULT_CLICK_LIFETIME = Duration.ofMinutes(5);
 
     /** What Paper and this plugin allow as an input key. */
     private static final Pattern KEY = Pattern.compile("[a-z0-9_]+");
+
+    /** The key under which Paper keeps a callback's id in the click payload, which an input would overwrite. */
+    private static final String RESERVED_KEY = "id";
 
     public DialogSpec {
         Objects.requireNonNull(title, "title");
@@ -41,11 +52,24 @@ public record DialogSpec(Component title, List<Component> body, List<InputSpec> 
         if (columns < 1) {
             throw new IllegalArgumentException("columns must be at least 1 but is " + columns);
         }
+        Objects.requireNonNull(clickLifetime, "clickLifetime");
+        if (clickLifetime.isNegative() || clickLifetime.isZero()) {
+            throw new IllegalArgumentException("clickLifetime must be positive but is " + clickLifetime);
+        }
+    }
+
+    /** A dialog whose buttons work for {@link #DEFAULT_CLICK_LIFETIME}. */
+    public DialogSpec(Component title, List<Component> body, List<InputSpec> inputs, List<ButtonSpec> buttons,
+                      ButtonSpec exit, int columns) {
+        this(title, body, inputs, buttons, exit, columns, DEFAULT_CLICK_LIFETIME);
     }
 
     private static String checkKey(String key) {
         if (key == null || !KEY.matcher(key).matches()) {
             throw new IllegalArgumentException("an input key must match " + KEY + " but is '" + key + "'");
+        }
+        if (key.equals(RESERVED_KEY)) {
+            throw new IllegalArgumentException("the input key '" + key + "' is reserved for Paper's callbacks");
         }
         return key;
     }

@@ -1,5 +1,6 @@
 package com.mcmiddleearth.commonervote.ui.spec;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -521,8 +522,30 @@ class DialogSpecsTest {
         assertThrows(IllegalArgumentException.class, () -> new NumberInput("n", label, 1, 5, 0));
         assertThrows(IllegalArgumentException.class, () -> new NumberInput("n", label, 5, 1, 3));
         assertThrows(IllegalArgumentException.class, () -> new ToggleInput("N", label, true));
+        // Paper keeps the callback's id under "id" in the click payload; an input "id" would overwrite it.
+        assertThrows(IllegalArgumentException.class, () -> new TextInput("id", label, "", 10, false));
+        assertThrows(IllegalArgumentException.class, () -> new NumberInput("id", label, 1, 5, 3));
+        assertThrows(IllegalArgumentException.class, () -> new ToggleInput("id", label, true));
         ButtonSpec close = new ButtonSpec(label, null, new ButtonAction.Close());
         assertThrows(IllegalArgumentException.class,
                 () -> new DialogSpec(label, List.of(), List.of(), List.of(), close, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DialogSpec(label, List.of(), List.of(), List.of(), close, 1, Duration.ZERO));
+    }
+
+    // ---- how long a click stays valid ----
+
+    @Test
+    void editing_dialogs_keep_their_clicks_longer() {
+        Settings s = Settings.defaults();
+        assertEquals(Duration.ofMinutes(30),
+                DialogSpecs.settings(new SettingsView(s, p -> { }, (p, f) -> { })).clickLifetime());
+        assertEquals(Duration.ofMinutes(30), DialogSpecs.texts(new TextsView(s, (p, f) -> { })).clickLifetime());
+        assertEquals(Duration.ofMinutes(5), DialogSpecs.vote(newVote(r -> { })).clickLifetime());
+        assertEquals(Duration.ofMinutes(5), everySpec()
+                .filter(spec -> !Set.of("Vote settings", "Texts and links").contains(plain(spec.title())))
+                .map(DialogSpec::clickLifetime).distinct().reduce((a, b) -> {
+                    throw new AssertionError("more than one lifetime: " + a + ", " + b);
+                }).orElseThrow());
     }
 }

@@ -1,6 +1,5 @@
 package com.mcmiddleearth.commonervote.ui;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
@@ -53,8 +52,9 @@ import net.kyori.adventure.text.event.ClickEvent;
  * whose {@link DialogSpec#buttons()} is empty (the guest info without a guide link, say) becomes a notice whose only
  * button is the exit button. The Escape key runs the exit button's action too.
  * <p>
- * <b>Buttons.</b> A {@link Callback} is a custom click that can be used once, for five minutes. It does nothing when
- * the plugin has been disabled since (Paper keeps click callbacks after a disable, so a reload would otherwise leave
+ * <b>Buttons.</b> A {@link Callback} is a custom click that can be used once, within the spec's
+ * {@link DialogSpec#clickLifetime()} (five minutes; thirty for the settings dialogs). It does nothing when the plugin
+ * has been disabled since (Paper keeps click callbacks after a disable, so a reload would otherwise leave
  * old buttons running against dead services) or when the clicker is not a player; the handler then gets the player
  * and the submitted values. An {@link OpenUrl} is a static open-URL click and a {@link Close} has no action, so the
  * button just closes the dialog. Dialog callbacks run on the main thread.
@@ -72,11 +72,6 @@ public final class PaperDialogPresenter implements DialogPresenter {
     private static final int BODY_WIDTH = 300;
     private static final int TEXT_WIDTH = 300;
     private static final int MULTILINE_HEIGHT = 100;
-
-    private static final ClickCallback.Options ONE_CLICK = ClickCallback.Options.builder()
-            .uses(1)
-            .lifetime(Duration.ofMinutes(5))
-            .build();
 
     private final Plugin plugin;
 
@@ -140,13 +135,19 @@ public final class PaperDialogPresenter implements DialogPresenter {
                 .canCloseWithEscape(true)
                 .afterAction(DialogBase.DialogAfterAction.CLOSE)
                 .build();
-        ActionButton exit = button(spec.exit(), BUTTON_WIDTH, spec.inputs());
+        ClickCallback.Options oneClick = ClickCallback.Options.builder()
+                .uses(1)
+                .lifetime(spec.clickLifetime())
+                .build();
+        ActionButton exit = button(spec.exit(), BUTTON_WIDTH, spec.inputs(), oneClick);
         DialogType type;
         if (spec.buttons().isEmpty()) {
             type = DialogType.notice(exit);
         } else {
             int width = spec.columns() == 1 ? LIST_BUTTON_WIDTH : BUTTON_WIDTH;
-            type = DialogType.multiAction(spec.buttons().stream().map(b -> button(b, width, spec.inputs())).toList())
+            type = DialogType.multiAction(spec.buttons().stream()
+                            .map(b -> button(b, width, spec.inputs(), oneClick))
+                            .toList())
                     .columns(spec.columns())
                     .exitAction(exit)
                     .build();
@@ -177,22 +178,22 @@ public final class PaperDialogPresenter implements DialogPresenter {
         };
     }
 
-    private ActionButton button(ButtonSpec spec, int width, List<InputSpec> inputs) {
+    private ActionButton button(ButtonSpec spec, int width, List<InputSpec> inputs, ClickCallback.Options oneClick) {
         return ActionButton.builder(spec.label())
                 .tooltip(spec.tooltip())
                 .width(width)
-                .action(action(spec.action(), inputs))
+                .action(action(spec.action(), inputs, oneClick))
                 .build();
     }
 
     /** The click of a button; {@code null} for a button that only closes the dialog. */
-    private DialogAction action(ButtonAction action, List<InputSpec> inputs) {
+    private DialogAction action(ButtonAction action, List<InputSpec> inputs, ClickCallback.Options oneClick) {
         return switch (action) {
             case Callback(var handler) -> DialogAction.customClick((response, audience) -> {
                 if (plugin.isEnabled() && audience instanceof Player player) {
                     handler.accept(player, new ResponseValues(response, inputs));
                 }
-            }, ONE_CLICK);
+            }, oneClick);
             case OpenUrl(var url) -> DialogAction.staticAction(ClickEvent.openUrl(url));
             case Close() -> null;
         };
