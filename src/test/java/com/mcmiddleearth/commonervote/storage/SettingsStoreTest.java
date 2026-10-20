@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.bukkit.configuration.MemoryConfiguration;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.domain.SettingsForm;
+import com.mcmiddleearth.commonervote.domain.TextsForm;
 import com.mcmiddleearth.commonervote.support.TestDatabase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -250,6 +252,37 @@ class SettingsStoreTest {
 
         assertWeight("a", 0.1);
         assertEquals("10", store.load().get("votesNeeded"));
+    }
+
+    @Test
+    void save_refuses_settings_that_are_out_of_range_and_changes_nothing() throws SQLException {
+        store.seedMissing(Settings.defaults().toMap());
+        insertVote("a", 0.2);
+        insertVote("b", 0.4);
+        Map<String, String> before = store.load();
+        AtomicInteger opened = new AtomicInteger();
+        SettingsStore counting = new SettingsStore(() -> {
+            opened.incrementAndGet();
+            return db.open();
+        });
+
+        // 25 would rescale the weights by 5/25 and store a value that loads back as the default 5; 0 would divide
+        // by zero. Neither may reach the database.
+        for (int votesNeeded : new int[] {25, 0, -3, 21}) {
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> counting.save(Settings.defaults().withNumbers(form(votesNeeded, 100))),
+                    "votesNeeded " + votesNeeded);
+            assertTrue(e.getMessage().contains("votesNeeded"), e.getMessage());
+        }
+        // Any other fault the settings carry is refused the same way.
+        Settings noCommand = Settings.defaults().withTexts(new TextsForm("commoner", "", "", "", "", "", "", ""));
+        assertThrows(IllegalArgumentException.class, () -> counting.save(noCommand));
+        assertThrows(IllegalArgumentException.class, () -> counting.save(
+                Settings.defaults().withNumbers(form(5, 400))));
+
+        assertEquals(0, opened.get(), "a refused save must not even open a connection");
+        assertEquals(before, store.load());
+        assertWeights(0.2, 0.4);
     }
 
     @Test

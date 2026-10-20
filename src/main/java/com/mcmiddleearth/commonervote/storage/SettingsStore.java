@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -68,8 +69,17 @@ public final class SettingsStore {
     /**
      * Writes all settings. When {@code votesNeeded} differs from the stored value, every vote weight is rescaled
      * first, in the same transaction. If anything fails, nothing is changed.
+     *
+     * @throws IllegalArgumentException if {@link Settings#problems()} is not empty, before any connection is
+     *                                  opened. A {@code votesNeeded} outside its range must never be stored: it
+     *                                  would rescale the weights, and {@link Settings#fromMap} would then read it
+     *                                  back as the default, leaving every vote worth the wrong share for good.
      */
     public void save(Settings s) throws SQLException {
+        List<String> problems = s.problems();
+        if (!problems.isEmpty()) {
+            throw new IllegalArgumentException("Settings not saved: " + String.join(" ", problems));
+        }
         Map<String, String> values = s.toMap();
         inTransaction(c -> {
             // The lock serialises two saves, so neither can rescale from a value the other is changing.
