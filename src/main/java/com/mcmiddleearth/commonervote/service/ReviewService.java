@@ -9,7 +9,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.stream.Stream;
@@ -75,6 +74,7 @@ public final class ReviewService {
     private final SettingsCache settings;
     private final RankService ranks;
     private final PlayerNames names;
+    private final Continuations continuations;
     private final Messenger messenger;
     private final DialogPresenter presenter;
     private final XpBarService xp;
@@ -94,6 +94,7 @@ public final class ReviewService {
         this.settings = Objects.requireNonNull(settings);
         this.ranks = Objects.requireNonNull(ranks);
         this.names = new PlayerNames(ranks, main);
+        this.continuations = new Continuations(main);
         this.messenger = Objects.requireNonNull(messenger);
         this.presenter = Objects.requireNonNull(presenter);
         this.xp = Objects.requireNonNull(xp);
@@ -111,7 +112,7 @@ public final class ReviewService {
         if (!allowed(admin, Permissions.REVIEW)) {
             return;
         }
-        whenReady(admin, candidates(), found -> {
+        continuations.whenReady(admin, candidates(), found -> {
             if (found.isEmpty()) {
                 admin.sendMessage(Messages.noCandidates());
                 return;
@@ -189,11 +190,13 @@ public final class ReviewService {
         }
         boolean mayPromote = has(admin, Permissions.PROMOTE);
         boolean mayClear = has(admin, Permissions.CLEAR);
-        whenReady(admin, detail(candidate), detail -> presenter.showReviewDetail(admin, new ReviewDetailView(name,
-                detail.percent(), detail.lines(),
-                mayPromote ? Optional.of(clicker -> confirmPromote(clicker, candidate, name)) : Optional.empty(),
-                mayClear ? Optional.of(clicker -> confirmClear(clicker, candidate, name)) : Optional.empty(),
-                this::openList)));
+        continuations.whenReady(admin, detail(candidate), detail ->
+                presenter.showReviewDetail(admin, new ReviewDetailView(name, detail.percent(), detail.lines(),
+                        mayPromote ? Optional.of(clicker -> confirmPromote(clicker, candidate, name))
+                                : Optional.empty(),
+                        mayClear ? Optional.of(clicker -> confirmClear(clicker, candidate, name))
+                                : Optional.empty(),
+                        this::openList)));
     }
 
     /** The valid votes for a candidate, newest first, with the voters' names, and the candidate's percentage. */
@@ -231,7 +234,7 @@ public final class ReviewService {
         if (!allowed(admin, Permissions.CLEAR)) {
             return;
         }
-        whenReady(admin, db.supply(() -> votes.validVotesFor(candidate, ALL_VOTES).size()), count ->
+        continuations.whenReady(admin, db.supply(() -> votes.validVotesFor(candidate, ALL_VOTES).size()), count ->
                 presenter.showConfirm(admin, new ConfirmView("Clear votes for " + name + "?",
                         "This deletes all " + count + " votes for " + name + ". It can't be undone.", "Clear votes",
                         clicker -> clear(clicker, candidate, name))));
@@ -256,12 +259,12 @@ public final class ReviewService {
         if (!allowed(admin, Permissions.CLEAR)) {
             return;
         }
-        onMain(db.supply(() -> votes.clear(candidate)), (count, error) -> {
+        continuations.onMain(db.supply(() -> votes.clear(candidate)), (count, error) -> {
             if (error != null) {
-                tell(admin, Messages.databaseDown());
+                Continuations.tell(admin, Messages.databaseDown());
                 return;
             }
-            tell(admin, Messages.votesCleared(name, count));
+            Continuations.tell(admin, Messages.votesCleared(name, count));
             Player recipient = Bukkit.getPlayer(candidate);
             if (recipient == null) {
                 messenger.notifyRecipient(name, Messenger.Update.UPDATE);
@@ -336,7 +339,7 @@ public final class ReviewService {
     }
 
     private void printCandidates(CommandSender sender) {
-        whenReady(sender, candidates(), found -> {
+        continuations.whenReady(sender, candidates(), found -> {
             if (found.isEmpty()) {
                 sender.sendMessage(Messages.noCandidates());
                 return;
@@ -349,7 +352,7 @@ public final class ReviewService {
     }
 
     private void printVotes(CommandSender sender, Target target) {
-        whenReady(sender, detail(target.id()), detail -> {
+        continuations.whenReady(sender, detail(target.id()), detail -> {
             if (detail.lines().isEmpty()) {
                 sender.sendMessage(Messages.progressOf(target.name(), detail.percent()));
                 return;
@@ -384,7 +387,7 @@ public final class ReviewService {
      * {@link Messages#databaseDown()}. Nothing happens for a sender who is a player and has gone offline.
      */
     private void resolve(CommandSender sender, String typedName, Consumer<Target> found) {
-        whenReady(sender, names.find(typedName), target -> {
+        continuations.whenReady(sender, names.find(typedName), target -> {
             if (target.isPresent()) {
                 found.accept(target.get());
             } else {
@@ -393,44 +396,7 @@ public final class ReviewService {
         });
     }
 
-    // ---- plumbing ----
-
-    /**
-     * Runs {@code then} on the main thread with the outcome of {@code future}: the value, or the failure. An exception
-     * thrown by {@code then} is left to the main thread's handler, which logs it.
-     */
-    private <T> void onMain(CompletableFuture<T> future, BiConsumer<? super T, ? super Throwable> then) {
-        future.whenComplete((value, error) -> main.execute(() -> then.accept(value, error)));
-    }
-
-    /**
-     * Runs {@code then} on the main thread with the value of {@code future}, for a flow whose only result is something
-     * shown to {@code who}. Nothing happens if {@code who} is a player who has left; if the future failed, {@code who}
-     * is told the database is unreachable.
-     */
-    private <T> void whenReady(CommandSender who, CompletableFuture<T> future, Consumer<? super T> then) {
-        onMain(future, (value, error) -> {
-            if (gone(who)) {
-                return;
-            }
-            if (error != null) {
-                who.sendMessage(Messages.databaseDown());
-                return;
-            }
-            then.accept(value);
-        });
-    }
-
-    /** Sends the message, unless the receiver is a player who has gone offline. */
-    private static void tell(CommandSender receiver, Component message) {
-        if (!gone(receiver)) {
-            receiver.sendMessage(message);
-        }
-    }
-
-    private static boolean gone(CommandSender who) {
-        return who instanceof Player p && !p.isOnline();
-    }
+    // ---- what the views are made from ----
 
     /** One line of the candidate list. */
     private record Candidate(UUID id, String name, int percent, Optional<String> blockedByGroup) {

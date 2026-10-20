@@ -9,7 +9,6 @@ import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
@@ -62,11 +61,11 @@ import net.kyori.adventure.text.Component;
 public final class VoteService {
 
     private final DbExecutor db;
-    private final Executor main;
     private final VoteStore votes;
     private final SettingsCache settings;
     private final RankService ranks;
     private final PlayerNames names;
+    private final Continuations continuations;
     private final Messenger messenger;
     private final DialogPresenter presenter;
     private final XpBarService xp;
@@ -81,11 +80,11 @@ public final class VoteService {
                        Messenger messenger, DialogPresenter presenter, XpBarService xp, PromotionService promotion,
                        LongSupplier clock) {
         this.db = Objects.requireNonNull(db);
-        this.main = Objects.requireNonNull(main);
         this.votes = Objects.requireNonNull(votes);
         this.settings = Objects.requireNonNull(settings);
         this.ranks = Objects.requireNonNull(ranks);
         this.names = new PlayerNames(ranks, main);
+        this.continuations = new Continuations(main);
         this.messenger = Objects.requireNonNull(messenger);
         this.presenter = Objects.requireNonNull(presenter);
         this.xp = Objects.requireNonNull(xp);
@@ -125,7 +124,7 @@ public final class VoteService {
         }
         long since = validSince();
         List<UUID> ids = guests.stream().map(Target::id).toList();
-        whenReady(viewer, db.supply(() -> votes.validVotesFor(ids, since)), byGuest -> {
+        continuations.whenReady(viewer, db.supply(() -> votes.validVotesFor(ids, since)), byGuest -> {
             List<CandidateListView.Row> rows = guests.stream()
                     .map(g -> row(g, byGuest.getOrDefault(g.id(), List.of()), viewerId, since))
                     .sorted(Comparator.comparing(CandidateListView.Row::percent, Comparator.reverseOrder())
@@ -154,7 +153,7 @@ public final class VoteService {
         }
         UUID id = p.getUniqueId();
         long since = validSince();
-        whenReady(p, db.supply(() -> score(id, since)), score -> {
+        continuations.whenReady(p, db.supply(() -> score(id, since)), score -> {
             Settings s = settings.get();
             presenter.showGuestInfo(p, new GuestInfoView(VoteMath.percent(score),
                     Texts.mini(s.guestInfoText(), Texts.placeholders(s, p.getName())), s.guideUrl()));
@@ -168,7 +167,7 @@ public final class VoteService {
     public void showProgressOf(CommandSender sender, String typedName) {
         resolve(sender, typedName, target -> {
             long since = validSince();
-            whenReady(sender, db.supply(() -> score(target.id(), since)),
+            continuations.whenReady(sender, db.supply(() -> score(target.id(), since)),
                     score -> sender.sendMessage(Messages.progressOf(target.name(), VoteMath.percent(score))));
         });
     }
@@ -198,13 +197,14 @@ public final class VoteService {
         long now = clock.getAsLong();
         long since = VoteMath.validSince(now, s.validityDays());
         UUID voterId = voter.getUniqueId();
-        whenReady(voter, afterChecks(voter, target, name, () -> votes.validVotesFor(target, since)), checked -> {
-            switch (checked) {
-                case Checked.Refused<List<Vote>>(var message) -> voter.sendMessage(message);
-                case Checked.Passed<List<Vote>>(var valid) ->
-                    presenter.showVote(voter, voteView(voterId, target, name, valid, s, now));
-            }
-        });
+        continuations.whenReady(voter,
+                afterChecks(voter, target, name, () -> votes.validVotesFor(target, since)), checked -> {
+                    switch (checked) {
+                        case Checked.Refused<List<Vote>>(var message) -> voter.sendMessage(message);
+                        case Checked.Passed<List<Vote>>(var valid) ->
+                            presenter.showVote(voter, voteView(voterId, target, name, valid, s, now));
+                    }
+                });
     }
 
     private VoteView voteView(UUID voterId, UUID target, String name, List<Vote> valid, Settings s, long now) {
@@ -243,16 +243,17 @@ public final class VoteService {
         Settings s = settings.get();
         long now = clock.getAsLong();
         long since = VoteMath.validSince(now, s.validityDays());
-        onMain(afterChecks(voter, target, name, () -> votes.cast(voterId, target, staff, reason, now, since)),
+        continuations.onMain(
+                afterChecks(voter, target, name, () -> votes.cast(voterId, target, staff, reason, now, since)),
                 (checked, error) -> {
                     if (error != null) {
-                        tell(voter, Messages.databaseDown());
+                        Continuations.tell(voter, Messages.databaseDown());
                         return;
                     }
                     switch (checked) {
-                        case Checked.Refused<CastResult>(var message) -> tell(voter, message);
+                        case Checked.Refused<CastResult>(var message) -> Continuations.tell(voter, message);
                         case Checked.Passed<CastResult>(var cast) -> {
-                            tell(voter, cast.replacedValidVote()
+                            Continuations.tell(voter, cast.replacedValidVote()
                                     ? Messages.voteRenewed(name, s.validityDays())
                                     : Messages.voteCast(name, VoteMath.percent(cast.scoreBefore()),
                                             VoteMath.percent(cast.scoreAfter())));
@@ -289,19 +290,19 @@ public final class VoteService {
         }
         UUID voterId = voter.getUniqueId();
         long since = validSince();
-        onMain(db.supply(() -> {
+        continuations.onMain(db.supply(() -> {
             boolean removed = votes.withdraw(voterId, target);
             return new Withdrawal(removed, removed ? score(target, since) : 0);
         }), (withdrawal, error) -> {
             if (error != null) {
-                tell(voter, Messages.databaseDown());
+                Continuations.tell(voter, Messages.databaseDown());
                 return;
             }
             if (!withdrawal.removed()) {
-                tell(voter, Messages.noVoteToWithdraw(name));
+                Continuations.tell(voter, Messages.noVoteToWithdraw(name));
                 return;
             }
-            tell(voter, Messages.withdrawn(name));
+            Continuations.tell(voter, Messages.withdrawn(name));
             Player recipient = Bukkit.getPlayer(target);
             if (recipient == null) {
                 messenger.notifyRecipient(name, Messenger.Update.UPDATE);
@@ -369,7 +370,7 @@ public final class VoteService {
      * {@link Messages#databaseDown()}. Nothing happens for a sender who is a player and has gone offline.
      */
     private void resolve(CommandSender sender, String typedName, Consumer<Target> found) {
-        whenReady(sender, names.find(typedName), target -> {
+        continuations.whenReady(sender, names.find(typedName), target -> {
             if (target.isPresent()) {
                 found.accept(target.get());
             } else {
@@ -387,43 +388,6 @@ public final class VoteService {
 
     private long validSince() {
         return VoteMath.validSince(clock.getAsLong(), settings.get().validityDays());
-    }
-
-    /**
-     * Runs {@code then} on the main thread with the outcome of {@code future}: the value, or the failure. An exception
-     * thrown by {@code then} is left to the main thread's handler, which logs it.
-     */
-    private <T> void onMain(CompletableFuture<T> future, BiConsumer<? super T, ? super Throwable> then) {
-        future.whenComplete((value, error) -> main.execute(() -> then.accept(value, error)));
-    }
-
-    /**
-     * Runs {@code then} on the main thread with the value of {@code future}, for a flow whose only result is something
-     * shown to {@code who}. Nothing happens if {@code who} is a player who has left; if the future failed, {@code who}
-     * is told the database is unreachable.
-     */
-    private <T> void whenReady(CommandSender who, CompletableFuture<T> future, Consumer<? super T> then) {
-        onMain(future, (value, error) -> {
-            if (gone(who)) {
-                return;
-            }
-            if (error != null) {
-                who.sendMessage(Messages.databaseDown());
-                return;
-            }
-            then.accept(value);
-        });
-    }
-
-    /** Sends the message, unless the receiver is a player who has gone offline. */
-    private static void tell(CommandSender receiver, Component message) {
-        if (!gone(receiver)) {
-            receiver.sendMessage(message);
-        }
-    }
-
-    private static boolean gone(CommandSender who) {
-        return who instanceof Player p && !p.isOnline();
     }
 
     /** What a withdrawal did: whether there was a vote to remove, and the guest's score once it is gone. */
