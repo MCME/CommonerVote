@@ -1,0 +1,8 @@
+# CommonerVote 2 keeps its settings in the database; change them in game with /vote config.
+database:
+  dbName: development
+  user: development
+  password: development
+  ip: localhost
+  port: 3306
+useBungee: true

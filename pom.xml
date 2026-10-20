@@ -1,82 +1,140 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     <groupId>com.mcmiddleearth</groupId>
     <artifactId>CommonerVote</artifactId>
-    <version>1.2.9</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
+
+    <name>CommonerVote</name>
+    <description>Team votes that promote guests to Commoner</description>
+
     <properties>
+        <java.version>25</java.version>
+        <!-- Build kind for the jar name: RELEASE | SNAPSHOT | DEV. Override with -Dbuild.type=RELEASE. -->
+        <build.type>DEV</build.type>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
+
     <build>
+        <!-- MCME jar naming convention: {PluginName}-{A.B.C}-{SNAPSHOT|DEV|RELEASE}-{commit id}
+             Several MCME jars have existed at the same version string with different content,
+             which made them impossible to tell apart on a server. The commit id fixes that. -->
+        <finalName>${project.artifactId}-${project.version}-${build.type}-${git.commit.id.abbrev}</finalName>
         <plugins>
+            <!-- Resolves ${git.commit.id.abbrev} for the jar name above, from the current HEAD.
+                 Build after committing, or the jar will be stamped with the previous commit.
+                 In a linked git worktree this plugin reads the wrong commit, so set the property
+                 git.commit.id.abbrev yourself there (git rev-parse, 7 characters). -->
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>2.3.2</version>
+                <groupId>io.github.git-commit-id</groupId>
+                <artifactId>git-commit-id-maven-plugin</artifactId>
+                <version>9.0.1</version>
+                <executions>
+                    <execution>
+                        <id>resolve-git-commit</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                    </execution>
+                </executions>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <abbrevLength>7</abbrevLength>
+                    <generateGitPropertiesFile>false</generateGitPropertiesFile>
+                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                    <includeOnlyProperties>
+                        <includeOnlyProperty>^git.commit.id.abbrev$</includeOnlyProperty>
+                    </includeOnlyProperties>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>2.4.3</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <minimizeJar>false</minimizeJar>
-                            <artifactSet>
-                                <includes>
-                                    <include> org.mariadb.jdbc:mariadb-java-client </include>
-                                </includes>
-                            </artifactSet>
-                        </configuration>
-                    </execution>
-                </executions>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
+                <configuration>
+                    <release>${java.version}</release>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.6</version>
+                <configuration>
+                    <!-- Mockito attaches its agent at runtime, and ByteBuddy still uses
+                         sun.misc.Unsafe; both only print warnings on Java 25 without these flags. -->
+                    <argLine>-XX:+EnableDynamicAgentLoading -Xshare:off --sun-misc-unsafe-memory-access=allow</argLine>
+                </configuration>
             </plugin>
         </plugins>
         <resources>
             <resource>
+                <directory>src/main/resources</directory>
                 <filtering>true</filtering>
-                <directory>${basedir}/src/main/resources</directory>
-                <includes>
-                    <include>plugin.yml</include>
-                    <include>config.yml</include>
-                </includes>
             </resource>
         </resources>
     </build>
+
     <repositories>
+        <!-- LuckPerms, MockBukkit and H2 come from Maven Central, which needs no entry here. -->
         <repository>
-            <id>spigot-repo</id>
-            <url>https://hub.spigotmc.org/nexus/content/groups/public/</url>
+            <id>papermc</id>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
     </repositories>
+
     <dependencies>
         <dependency>
-            <groupId>org.bukkit</groupId>
-            <artifactId>bukkit</artifactId>
-            <version>1.15.2-R0.1-SNAPSHOT</version>
-            <scope>compile</scope>
-            <type>jar</type>
+            <groupId>io.papermc.paper</groupId>
+            <artifactId>paper-api</artifactId>
+            <!-- The same API build MCME-Architect 3.1.0 compiles against. -->
+            <version>26.2.build.126-stable</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.mcmiddleearth</groupId>
-            <artifactId>PluginUtils</artifactId>
-            <version>1.2.4</version>
+            <groupId>net.luckperms</groupId>
+            <artifactId>api</artifactId>
+            <version>5.4</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- No MariaDB driver dependency and nothing shaded: the database code uses only java.sql,
+             and Paper puts a JDBC driver on the server classpath. -->
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>6.1.3</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Declared before MockBukkit, so Maven picks Mockito's newer ByteBuddy. -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.24.0</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.mariadb.jdbc</groupId>
-            <artifactId>mariadb-java-client</artifactId>
-            <version>1.1.7</version>
+            <groupId>org.mockbukkit.mockbukkit</groupId>
+            <artifactId>mockbukkit-v26.2</artifactId>
+            <version>4.116.1</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- In-memory database for the storage tests. -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.3.232</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- paper-api brings slf4j-api 2.0.17 without a backend; this keeps the test log quiet. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-nop</artifactId>
+            <version>2.0.17</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>
