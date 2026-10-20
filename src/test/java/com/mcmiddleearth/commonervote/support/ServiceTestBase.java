@@ -12,11 +12,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
+import org.mockbukkit.mockbukkit.entity.OfflinePlayerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.service.PromotionService;
+import com.mcmiddleearth.commonervote.service.ReviewService;
 import com.mcmiddleearth.commonervote.service.SettingsCache;
 import com.mcmiddleearth.commonervote.service.VoteService;
 import com.mcmiddleearth.commonervote.service.XpBarService;
@@ -76,6 +78,7 @@ public abstract class ServiceTestBase {
     protected XpBarService xp;
     protected PromotionService promotion;
     protected VoteService voting;
+    protected ReviewService reviewing;
 
     @BeforeEach
     protected void setUpServiceTestBase() throws SQLException {
@@ -96,7 +99,7 @@ public abstract class ServiceTestBase {
 
     /**
      * Builds the database executor (on {@code Runnable::run}), the stores on {@link #connections}, the settings cache,
-     * the XP bar service and the services (promotion, voting) on {@link #main}.
+     * the XP bar service and the services (promotion, voting, reviewing) on {@link #main}.
      * <p>
      * The settings cache holds the settings stored in the test database, as after a reload, also when a test has
      * broken the {@link #connections} (as a server keeps its last settings while the database is down).
@@ -112,6 +115,8 @@ public abstract class ServiceTestBase {
         promotion = new PromotionService(db, main, votes, promotions, settings, ranks, messenger, presenter, xp,
                 commands, logger, () -> now);
         voting = new VoteService(db, main, votes, settings, ranks, messenger, presenter, xp, promotion, () -> now);
+        reviewing = new ReviewService(db, main, votes, settings, ranks, messenger, presenter, xp, promotion,
+                () -> now);
     }
 
     /** Makes every connection the services open fail, as when the database is down, and rebuilds the services. */
@@ -169,6 +174,17 @@ public abstract class ServiceTestBase {
         player.addAttachment(plugin, Permissions.EXEMPT, true);
         ranks.setExempt(player.getUniqueId(), true);
         return player;
+    }
+
+    /**
+     * A player who is not on this server and whom it has never seen, known to the rank service only. Paper has no name
+     * for such a UUID, which the test server is told here (its own answer would be a made-up name).
+     */
+    protected UUID remoteGuest(String name) {
+        UUID id = UUID.randomUUID();
+        ranks.add(id, name);
+        server.getPlayerList().addOfflinePlayer(new OfflinePlayerMock(id, null));
+        return id;
     }
 
     // ---- database contents ----

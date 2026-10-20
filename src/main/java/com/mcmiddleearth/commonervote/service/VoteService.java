@@ -23,6 +23,7 @@ import com.mcmiddleearth.commonervote.domain.Vote;
 import com.mcmiddleearth.commonervote.domain.VoteMath;
 import com.mcmiddleearth.commonervote.network.Messenger;
 import com.mcmiddleearth.commonervote.rank.RankService;
+import com.mcmiddleearth.commonervote.service.PlayerNames.Target;
 import com.mcmiddleearth.commonervote.storage.DbExecutor;
 import com.mcmiddleearth.commonervote.storage.SqlTask;
 import com.mcmiddleearth.commonervote.storage.VoteStore;
@@ -47,7 +48,7 @@ import net.kyori.adventure.text.Component;
  * <b>Names.</b> A typed name is found among the players online here (in any case), then through the rank service,
  * which also knows players who were only ever on another server. The name shown and used from then on is this
  * server's own spelling when the server knows the player, and otherwise the rank service's. LuckPerms keeps names in
- * lowercase, so that is only the fallback.
+ * lowercase, so that is only the fallback. See {@link PlayerNames}.
  * <p>
  * <b>Failures.</b> When a flow the player started fails because the database or the rank service cannot be reached,
  * the player is told {@link Messages#databaseDown()} and nothing else happens. The {@link DbExecutor} has already
@@ -65,6 +66,7 @@ public final class VoteService {
     private final VoteStore votes;
     private final SettingsCache settings;
     private final RankService ranks;
+    private final PlayerNames names;
     private final Messenger messenger;
     private final DialogPresenter presenter;
     private final XpBarService xp;
@@ -83,6 +85,7 @@ public final class VoteService {
         this.votes = Objects.requireNonNull(votes);
         this.settings = Objects.requireNonNull(settings);
         this.ranks = Objects.requireNonNull(ranks);
+        this.names = new PlayerNames(ranks, main);
         this.messenger = Objects.requireNonNull(messenger);
         this.presenter = Objects.requireNonNull(presenter);
         this.xp = Objects.requireNonNull(xp);
@@ -361,40 +364,18 @@ public final class VoteService {
     // ---- names ----
 
     /**
-     * Finds the player a sender typed and calls {@code found} with them on the main thread. An unknown name is
-     * answered with {@link Messages#unknownPlayer}, and a failure of the rank service with
+     * Finds the player a sender typed (see {@link PlayerNames#find}) and calls {@code found} with them on the main
+     * thread. An unknown name is answered with {@link Messages#unknownPlayer}, and a failure of the rank service with
      * {@link Messages#databaseDown()}. Nothing happens for a sender who is a player and has gone offline.
      */
     private void resolve(CommandSender sender, String typedName, Consumer<Target> found) {
-        Player online = Bukkit.getPlayerExact(typedName);
-        CompletableFuture<Optional<Target>> lookup = online != null
-                ? CompletableFuture.completedFuture(Optional.of(new Target(online.getUniqueId(), online.getName())))
-                : ranks.lookup(typedName).thenComposeAsync(match -> named(match, typedName), main);
-        whenReady(sender, lookup, target -> {
+        whenReady(sender, names.find(typedName), target -> {
             if (target.isPresent()) {
                 found.accept(target.get());
             } else {
                 sender.sendMessage(Messages.unknownPlayer(typedName));
             }
         });
-    }
-
-    /**
-     * The target the rank service found, with the name to show. Runs on the main thread: the server's own spelling of
-     * the name comes first when the server knows the player, then the rank service's, and as a last resort the name
-     * as it was typed (the player exists, since the rank service found them).
-     */
-    private CompletableFuture<Optional<Target>> named(Optional<UUID> match, String typedName) {
-        if (match.isEmpty()) {
-            return CompletableFuture.completedFuture(Optional.empty());
-        }
-        UUID id = match.get();
-        String knownName = Bukkit.getOfflinePlayer(id).getName(); // null for a player this server never saw
-        if (knownName != null) {
-            return CompletableFuture.completedFuture(Optional.of(new Target(id, knownName)));
-        }
-        return ranks.names(List.of(id))
-                .thenApply(names -> Optional.of(new Target(id, names.getOrDefault(id, typedName))));
     }
 
     // ---- plumbing ----
@@ -443,10 +424,6 @@ public final class VoteService {
 
     private static boolean gone(CommandSender who) {
         return who instanceof Player p && !p.isOnline();
-    }
-
-    /** A player and the name to show for them. */
-    private record Target(UUID id, String name) {
     }
 
     /** What a withdrawal did: whether there was a vote to remove, and the guest's score once it is gone. */

@@ -62,17 +62,6 @@ class VoteServiceTest extends ServiceTestBase {
         return view;
     }
 
-    /**
-     * A player who is not on this server and whom it has never seen, known to the rank service only. Paper has no name
-     * for such a UUID, which the test server is told here (its own answer would be a made-up name).
-     */
-    private UUID remoteGuest(String name) {
-        UUID id = UUID.randomUUID();
-        ranks.add(id, name);
-        server.getPlayerList().addOfflinePlayer(new OfflinePlayerMock(id, null));
-        return id;
-    }
-
     // ---- /vote with no argument ----
 
     @Test
