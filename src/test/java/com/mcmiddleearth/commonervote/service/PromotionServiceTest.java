@@ -489,6 +489,21 @@ class PromotionServiceTest extends ServiceTestBase {
     }
 
     @Test
+    void join_pending_welcome_keeps_real_xp() throws SQLException {
+        // Promoted while away, and has earned levels since: the bar is no longer the meter.
+        PlayerMock frodo = exempt("Frodo99");
+        frodo.setLevel(5);
+        frodo.setExp(0.4f);
+        recordPromotion(frodo.getUniqueId(), Source.MANUAL, false);
+
+        promotion.onJoin(frodo);
+
+        assertNotNull(presenter.last(frodo, WelcomeView.class));
+        assertEquals(5, frodo.getLevel(), "the player's own levels stay");
+        assertEquals(0.4f, frodo.getExp());
+    }
+
+    @Test
     void join_refreshes_and_checks() throws SQLException {
         PlayerMock frodo = guest("Frodo99");
         scoreOf(frodo, 0.6);

@@ -213,9 +213,10 @@ public final class PromotionService {
      *       recipient (otherwise every Commoner's join would add a row);</li>
      *   <li>a player who is not exempt but has a record loses it, and is a candidate again.</li>
      * </ul>
-     * A welcome shown here also empties the old progress meter (when the XP bar is the meter). Starts a new session
-     * for the player: a promotion that was under way for them is forgotten, though a command that already ran in this
-     * server run is never run again. A database failure is only logged.
+     * A welcome shown here also empties the old progress meter (when the XP bar is the meter, and only while the
+     * player's level is 0, as the meter keeps it: levels are the player's own). Starts a new session for the player: a
+     * promotion that was under way for them is forgotten, though a command that already ran in this server run is
+     * never run again. A database failure is only logged.
      */
     public void onJoin(Player p) {
         UUID id = p.getUniqueId();
@@ -228,7 +229,11 @@ public final class PromotionService {
                     return;
                 }
                 welcome(p);
-                releaseXp(p);
+                // Only while the bar still looks like the meter (level 0): a player promoted while away may have
+                // earned levels of their own since.
+                if (p.getLevel() == 0) {
+                    releaseXp(p);
+                }
             });
         } else {
             long since = validSince();
