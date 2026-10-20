@@ -157,7 +157,8 @@ public final class PromotionService {
      * is online here sees the welcome at once; anyone else sees it at their next join on any server. Does not check
      * the admin's permission: the caller has done that.
      *
-     * @param name the target's name, as the promotion command and the messages use it
+     * @param name the target's name, for the messages, the welcome and the announcement; the promotion command names
+     *             the target by UUID
      */
     public void promoteNow(CommandSender admin, UUID target, String name) {
         Object attempt = new Object();
@@ -270,11 +271,11 @@ public final class PromotionService {
      * {@link PromotionGuard} allows {@code groups}; a refusal releases the claim and is returned for the caller to
      * report.
      * <p>
-     * The steps, after the checks: the command; the record, written on the database thread with
-     * {@code welcomed=false}; then, back on the main thread once the write is over, however it went, the local steps
-     * first (for a player online here the welcome, see {@link #welcome}; the admin's confirmation; for that player the
-     * emptied progress meter) and the network announcement last. The claim stays, so the player is not promoted again
-     * in this session.
+     * The steps, after the checks: the command, with {@code <player>} replaced by the player's UUID; the record,
+     * written on the database thread with {@code welcomed=false}; then, back on the main thread once the write is
+     * over, however it went, the local steps first (for a player online here the welcome, see {@link #welcome}; the
+     * admin's confirmation; for that player the emptied progress meter) and the network announcement last. The claim
+     * stays, so the player is not promoted again in this session.
      * <p>
      * A record that cannot be written changes none of this: the command has run, so the promotion goes on. The
      * {@link DbExecutor} logs the failure, and nobody is told the database is down next to a welcome or a
@@ -295,7 +296,10 @@ public final class PromotionService {
             inProgress.remove(id, attempt);
             return new Outcome.Blocked(guard.blockingGroup().orElseThrow());
         }
-        String command = s.promotionCommand().replace("<player>", name).replace("<group>", s.commonerGroup());
+        // <player> is the UUID, never a name: a shown name can be stale (a renamed guest's old name may be someone
+        // else's now), and LuckPerms takes a UUID wherever it takes a name.
+        String command = s.promotionCommand().replace("<player>", id.toString())
+                .replace("<group>", s.commonerGroup());
         logger.info("Promoting " + name + " (" + source.name().toLowerCase(Locale.ROOT) + "): " + command);
         // Marked before it runs: if running it throws, it may still have taken effect, so it is never run again.
         commandRan.add(id);

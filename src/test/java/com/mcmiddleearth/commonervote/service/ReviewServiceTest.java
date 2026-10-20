@@ -40,8 +40,6 @@ class ReviewServiceTest extends ServiceTestBase {
     /** Somebody who gave the votes that a test seeds. */
     private static final UUID VOTER = UUID.randomUUID();
 
-    private static final String PROMOTE_BILBO = "lp user Bilbo_B parent set commoner";
-
     /** An admin with the three review rights. */
     private PlayerMock admin(String name) {
         return withPermissions(name, Permissions.REVIEW, Permissions.CLEAR, Permissions.PROMOTE);
@@ -447,7 +445,7 @@ class ReviewServiceTest extends ServiceTestBase {
 
         confirm.onConfirm().accept(elrond);
 
-        assertEquals(List.of(PROMOTE_BILBO), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo)), commands.commands());
         assertEquals(Messages.promoted("Bilbo_B"), elrond.nextComponentMessage());
         assertEquals(Source.MANUAL, promotionOf(bilbo).orElseThrow().source());
     }
@@ -475,7 +473,7 @@ class ReviewServiceTest extends ServiceTestBase {
         assertEquals("Promote Bilbo_B now?", presenter.last(elrond, ConfirmView.class).title());
         presenter.last(elrond, ConfirmView.class).onConfirm().accept(elrond);
 
-        assertEquals(List.of(PROMOTE_BILBO), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertEquals(Messages.promoted("Bilbo_B"), elrond.nextComponentMessage());
         assertEquals(Source.MANUAL, promotionOf(bilbo.getUniqueId()).orElseThrow().source());
     }
@@ -483,14 +481,31 @@ class ReviewServiceTest extends ServiceTestBase {
     @Test
     void the_console_promotes_without_a_confirmation() {
         ConsoleCommandSenderMock console = server.getConsoleSender();
-        remoteGuest("Bilbo_B");
+        UUID bilbo = remoteGuest("Bilbo_B");
 
         reviewing.promote(console, "bilbo_b");
         reviewing.promote(console, "nobody");
 
-        assertEquals(List.of(PROMOTE_BILBO), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo)), commands.commands());
         assertEquals("[Vote] Bilbo_B is now a Commoner.", Texts.plain(console.nextComponentMessage()));
         assertEquals("[Vote] No player called nobody has been on MCME.", Texts.plain(console.nextComponentMessage()));
+    }
+
+    @Test
+    void the_command_names_an_offline_target_by_uuid() {
+        // Renamed since: this server shows the old name, LuckPerms knows the new one.
+        ConsoleCommandSenderMock console = server.getConsoleSender();
+        UUID renamed = UUID.randomUUID();
+        ranks.add(renamed, "newname");
+        server.getPlayerList().addOfflinePlayer(new OfflinePlayerMock(renamed, "OldName"));
+
+        reviewing.promote(console, "newname");
+
+        assertEquals(List.of("lp user " + renamed + " parent set commoner"), commands.commands());
+        String command = commands.commands().get(0);
+        assertFalse(command.contains("OldName") || command.contains("newname"), command);
+        assertEquals("[Vote] OldName is now a Commoner.", Texts.plain(console.nextComponentMessage()),
+                "the messages keep the name shown");
     }
 
     // ---- permissions ----

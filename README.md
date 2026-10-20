@@ -117,7 +117,7 @@ saved.
 | `broadcastNetwork` | `true` | Announce a promotion to every player on the network. When off, or without a proxy channel, only this server hears it |
 | `commonerGroup` | `commoner` | The LuckPerms group a promotion gives; it fills `<group>` in the promotion command |
 | `promotableGroups` | empty | Comma-separated LuckPerms groups that do not block an automatic promotion (see below) |
-| `promotionCommand` | `lp user <player> parent set <group>` | Run from the console on a promotion. Must contain `<player>` |
+| `promotionCommand` | `lp user <player> parent set <group>` | Run from the console on a promotion. `<player>` is replaced by the player's UUID, which LuckPerms accepts in place of a name. Must contain `<player>` |
 | `rulesUrl` | `https://www.mcmiddleearth.com/help/terms` | The "Read the rules" button in the welcome dialog |
 | `guideUrl` | empty | The "Building guide" button in the guest dialog; the button is hidden when this is empty |
 | `guestInfoText` | see below | The explanation a guest sees on `/vote` |
@@ -142,6 +142,10 @@ direct LuckPerms groups are `default` plus the groups in `promotableGroups`. For
 The review list marks such a player ("Auto-promotion blocked: has group …"), the log gets one INFO line per player per
 session, and "Promote now" tells the admin which group blocks it. The admin can then use LuckPerms by hand, or add a
 harmless group to `promotableGroups`.
+
+The command names the player by UUID (`lp user 3f8e1c2a-5b7d-4e9f-a1c3-2d4b6f8a0e1c parent set commoner`), never by
+name: a name can be out of date, and a renamed guest's old name may belong to someone else by now, whom the guard never
+checked. The messages, the welcome and the announcement still use the player's name.
 
 An automatic promotion also needs `autoPromote` on, the guest online on the server that notices (on join, after a
 vote, or after an update from another server), and the guest not to hold `commonervote.exempt`.

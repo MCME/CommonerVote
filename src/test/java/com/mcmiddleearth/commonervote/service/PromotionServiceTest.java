@@ -41,8 +41,6 @@ import static org.mockito.Mockito.mock;
 
 class PromotionServiceTest extends ServiceTestBase {
 
-    private static final String COMMAND = "lp user Bilbo_B parent set commoner";
-
     private static final UUID VOTER = UUID.randomUUID();
 
     /** Gives {@code player} valid votes adding up to {@code score}. */
@@ -70,7 +68,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         PromotionRecord record = promotionOf(bilbo.getUniqueId()).orElseThrow();
         assertEquals(Source.AUTO, record.source());
         assertTrue(record.welcomed(), "the welcome was shown at once");
@@ -94,7 +92,28 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of("lp user Bilbo_B parent add citizen"), commands.commands());
+        assertEquals(List.of("lp user " + bilbo.getUniqueId() + " parent add citizen"), commands.commands());
+    }
+
+    @Test
+    void the_command_names_the_player_by_uuid_whatever_name_is_shown() {
+        // A renamed guest: the name shown here is the old one, LuckPerms knows the new one, and the old one may be
+        // somebody else's by now. Only the UUID is sure to be this player.
+        PlayerMock elrond = staff("Elrond");
+        UUID renamed = UUID.randomUUID();
+        ranks.add(renamed, "newname");
+        PlayerMock bilbo = guest("Bilbo_B");
+
+        promotion.promoteNow(elrond, renamed, "OldName");
+        promotion.checkAutoPromotion(bilbo, 1.0);
+
+        assertEquals(List.of("lp user " + renamed + " parent set commoner",
+                "lp user " + bilbo.getUniqueId() + " parent set commoner"), commands.commands());
+        assertTrue(commands.commands().stream().noneMatch(c -> c.contains("OldName") || c.contains("newname")
+                || c.contains("Bilbo_B")), commands.commands().toString());
+        assertEquals(Messages.promoted("OldName"), elrond.nextComponentMessage(), "the messages keep the name");
+        assertEquals("★ OldName has been promoted to Commoner!", Texts.plain(messenger.announcements().get(0)));
+        assertEquals("★ Bilbo_B has been promoted to Commoner!", Texts.plain(messenger.announcements().get(1)));
     }
 
     @Test
@@ -121,7 +140,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertNotNull(presenter.last(bilbo, WelcomeView.class));
         assertEquals(7, bilbo.getLevel(), "with the switch off the XP is the player's own");
         assertEquals(0.3f, bilbo.getExp());
@@ -167,7 +186,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertEquals(Source.AUTO, promotionOf(bilbo.getUniqueId()).orElseThrow().source());
     }
 
@@ -181,7 +200,8 @@ class PromotionServiceTest extends ServiceTestBase {
         setting("promotableGroups", "badge_moderator");
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands(), "a block does not hold the player for the session");
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands(),
+                "a block does not hold the player for the session");
     }
 
     @Test
@@ -191,7 +211,7 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.checkAutoPromotion(bilbo, 1.0);
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertEquals(1, messenger.announcements().size());
     }
 
@@ -206,7 +226,7 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.checkAutoPromotion(bilbo, 1.0);
         queue.runAll();
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
     }
 
     @Test
@@ -226,7 +246,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.checkAutoPromotion(bilbo, 0.99995);
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
     }
 
     @Test
@@ -249,7 +269,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.promoteNow(elrond, bilbo, "Bilbo_B");
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo)), commands.commands());
         PromotionRecord record = promotionOf(bilbo).orElseThrow();
         assertEquals(Source.MANUAL, record.source());
         assertFalse(record.welcomed(), "the welcome waits for the next join");
@@ -265,7 +285,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.promoteNow(elrond, bilbo.getUniqueId(), "Bilbo_B");
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         PromotionRecord record = promotionOf(bilbo.getUniqueId()).orElseThrow();
         assertEquals(Source.MANUAL, record.source());
         assertTrue(record.welcomed());
@@ -312,7 +332,7 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.promoteNow(elrond, bilbo, "Bilbo_B");
         promotion.promoteNow(elrond, bilbo, "Bilbo_B");
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo)), commands.commands());
         assertEquals(Messages.promoted("Bilbo_B"), elrond.nextComponentMessage());
         assertEquals(Messages.targetExempt("Bilbo_B"), elrond.nextComponentMessage());
     }
@@ -329,7 +349,7 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.promoteNow(elrond, bilbo.getUniqueId(), "Bilbo_B");
         queue.runAll();
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertEquals(Messages.targetExempt("Bilbo_B"), elrond.nextComponentMessage());
     }
 
@@ -343,7 +363,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.promoteNow(elrond, bilbo.getUniqueId(), "Bilbo_B");
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertEquals(Messages.targetExempt("Bilbo_B"), elrond.nextComponentMessage());
         assertEquals(1, messenger.announcements().size());
     }
@@ -361,7 +381,7 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.onJoin(bilbo); // drops the claim; its auto-check comes after the admin's promotion
         queue.runAll();
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertEquals(Messages.promoted("Bilbo_B"), elrond.nextComponentMessage());
         assertEquals(Source.MANUAL, promotionOf(bilbo.getUniqueId()).orElseThrow().source());
     }
@@ -447,7 +467,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         assertEquals(0, frodo.getLevel());
         assertEquals(0.6f, frodo.getExp());
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
     }
 
     @Test
@@ -493,7 +513,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.onRemoteUpdate(bilbo, Update.UPDATE);
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
     }
 
     // ---- quitting between the async work and its continuation (Review Focus 4) ----
@@ -529,7 +549,7 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.onJoin(bilbo);
         queue.runAll();
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
     }
 
     @Test
@@ -561,7 +581,8 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.onJoin(bilbo);
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands(), "the command runs once per player per server run");
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands(),
+                "the command runs once per player per server run");
         assertEquals(1, messenger.announcements().size());
     }
 
@@ -575,7 +596,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.checkAutoPromotion(bilbo, 1.0);
         steps.remove().run(); // the guard passes, the command runs and the record is written
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         bilbo.disconnect();
         promotion.onQuit(bilbo);
         steps.remove().run(); // back on the main thread: the announcement goes out, the welcome waits
@@ -593,7 +614,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         assertNotNull(presenter.last(bilbo, WelcomeView.class));
         assertTrue(promotionOf(bilbo.getUniqueId()).orElseThrow().welcomed());
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
     }
 
     // ---- failures ----
@@ -628,7 +649,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertNotNull(presenter.last(bilbo, WelcomeView.class), "the command ran, so the promotion goes on");
         assertEquals(0, bilbo.getLevel());
         assertEquals(0.0f, bilbo.getExp());
@@ -641,7 +662,7 @@ class PromotionServiceTest extends ServiceTestBase {
         promotion.onJoin(bilbo);
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands(), "never a second command");
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands(), "never a second command");
         assertEquals(1, messenger.announcements().size());
     }
 
@@ -654,7 +675,7 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.promoteNow(elrond, bilbo, "Bilbo_B");
 
-        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo)), commands.commands());
         assertEquals(Messages.promoted("Bilbo_B"), elrond.nextComponentMessage());
         assertNull(elrond.nextComponentMessage(), "no database line next to the confirmation");
         assertEquals(1, messenger.announcements().size());

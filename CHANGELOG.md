@@ -43,6 +43,8 @@ A rewrite for Paper 26.2 and Java 25. The votes table is unchanged, so every exi
 - Settings now live in the database (`/vote config`). `config.yml` only keeps the `database` section and `useBungee`:
   the other 1.2.9 keys are ignored, and the startup log names the ones still in the file.
 - Changing `votesNeeded` rescales every stored vote, so each keeps its worth in whole votes.
+- `<player>` in the promotion command is replaced by the player's UUID, which LuckPerms accepts, instead of their name.
+  A name can be out of date, and a renamed guest's old name could point the command at somebody else.
 - A failure of the database tells the player "The vote database is unreachable. Try again in a minute." and logs a
   WARNING line with a stack trace at most once a minute.
 - Database work runs on one dedicated thread, over a fresh connection for each piece of work, with the MySQL driver that

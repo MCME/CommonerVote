@@ -42,8 +42,6 @@ class VoteServiceTest extends ServiceTestBase {
     /** Somebody else, who gave the votes that a test seeds. */
     private static final UUID OTHER_VOTER = UUID.randomUUID();
 
-    private static final String PROMOTE_BILBO = "lp user Bilbo_B parent set commoner";
-
     /** The votes stored for {@code target}, expired ones included. */
     private List<Vote> stored(Player target) throws SQLException {
         return votes.validVotesFor(target.getUniqueId(), 0L);
@@ -461,7 +459,7 @@ class VoteServiceTest extends ServiceTestBase {
 
         voting.cast(elrond, bilbo.getUniqueId(), "Bilbo_B", "");
 
-        assertEquals(List.of(PROMOTE_BILBO), commands.commands());
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands());
         assertNotNull(presenter.last(bilbo, WelcomeView.class));
         assertEquals(Messages.voteCast("Bilbo_B", 80, 100), elrond.nextComponentMessage());
     }
@@ -732,7 +730,8 @@ class VoteServiceTest extends ServiceTestBase {
         assertDoesNotThrow(queue::runAll);
 
         assertEquals(2, stored(bilbo).size(), "the vote is in the database");
-        assertEquals(List.of(PROMOTE_BILBO), commands.commands(), "so the guest is promoted all the same");
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId())), commands.commands(),
+                "so the guest is promoted all the same");
         assertNull(elrond.nextComponentMessage(), "nothing goes to the player who left");
     }
 

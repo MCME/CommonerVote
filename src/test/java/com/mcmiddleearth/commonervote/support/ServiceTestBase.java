@@ -221,6 +221,11 @@ public abstract class ServiceTestBase {
         return new PromotionStore(database).find(player);
     }
 
+    /** The console command that the default settings run to promote {@code player}: it names them by UUID. */
+    protected static String promotionCommand(UUID player) {
+        return "lp user " + player + " parent set commoner";
+    }
+
     private Settings storedSettings() throws SQLException {
         return Settings.fromMap(new SettingsStore(database).load(), warning -> {
             throw new IllegalArgumentException(warning);
