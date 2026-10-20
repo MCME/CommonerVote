@@ -21,6 +21,7 @@ import org.mockbukkit.mockbukkit.command.MessageTarget;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
+import com.mcmiddleearth.commonervote.service.Messages;
 import com.mcmiddleearth.commonervote.support.RecordingPresenter;
 import com.mcmiddleearth.commonervote.support.TestCommonerVotePlugin;
 import com.mcmiddleearth.commonervote.ui.Texts;
@@ -101,10 +102,12 @@ class VoteCommandTest {
         PlayerMock bilbo = guest("Bilbo_B");
         PlayerMock team = teamMember("Gandalf");
         guest("Frodo99");
+        drain(bilbo);
 
         bilbo.performCommand("vote Frodo99");
         team.performCommand("vote Frodo99");
 
+        assertRefusedByTheTree(bilbo, "vote Frodo99");
         assertNull(presenter.last(bilbo, VoteView.class), "a guest may not vote");
         VoteView view = presenter.last(team, VoteView.class);
         assertNotNull(view, "a team member's /vote <player> opens the vote dialog");
@@ -128,11 +131,28 @@ class VoteCommandTest {
     void literal_wins() {
         PlayerMock team = teamMember("Gandalf");
         guest("review"); // a guest whose name is the subcommand's
+        drain(team);
 
         team.performCommand("vote review");
+        assertRefusedByTheTree(team, "vote review");
+        team.performCommand("commonervote:vote review");
+        assertRefusedByTheTree(team, "commonervote:vote review");
 
         assertNull(presenter.last(team, ReviewListView.class), "review needs commonervote.review");
         assertNull(presenter.last(team, VoteView.class), "not a vote for the player called review");
+    }
+
+    @Test
+    void withdraw_requires_vote() throws SQLException {
+        PlayerMock bilbo = guest("Bilbo_B");
+        PlayerMock frodo = guest("Frodo99");
+        vote(bilbo.getUniqueId(), frodo.getUniqueId()); // cast while Bilbo was still on the team
+        drain(bilbo);
+
+        bilbo.performCommand("vote withdraw Frodo99");
+
+        assertRefusedByTheTree(bilbo, "vote withdraw Frodo99");
+        assertEquals(1, votesFor(frodo.getUniqueId()), "the vote stays");
     }
 
     // ---- the other subcommands ----
@@ -204,11 +224,13 @@ class VoteCommandTest {
         PlayerMock team = teamMember("Gandalf");
         PlayerMock frodo = guest("Frodo99");
         vote(UUID.randomUUID(), frodo.getUniqueId());
+        drain(team);
 
-        team.performCommand("vote review Frodo99");
-        team.performCommand("vote clear Frodo99");
-        team.performCommand("vote promote Frodo99");
-        team.performCommand("vote config");
+        for (String command : List.of("vote review Frodo99", "vote clear Frodo99", "vote promote Frodo99",
+                "vote config")) {
+            team.performCommand(command);
+            assertRefusedByTheTree(team, command);
+        }
 
         assertNull(presenter.last(team, ReviewDetailView.class));
         assertNull(presenter.last(team, ConfirmView.class));
@@ -393,6 +415,17 @@ class VoteCommandTest {
      */
     private List<String> tabComplete(CommandSender sender, String commandLine) {
         return server.getCommandMap().tabComplete(sender, commandLine);
+    }
+
+    /**
+     * Asserts that the tree's {@code requires} refused the command, not the service behind it. Both refuse a sender
+     * without the permission, but differently: the tree with Brigadier's error, the service with
+     * {@link Messages#noPermission()}. So the sender must not have been sent that line. Reads the sender's messages.
+     */
+    private static void assertRefusedByTheTree(PlayerMock sender, String command) {
+        List<String> lines = plainMessages(sender);
+        assertFalse(lines.contains(Texts.plain(Messages.noPermission())),
+                command + " reached the service, which refused it: " + lines);
     }
 
     /** Every message the target has received and not yet read, as plain text. */
