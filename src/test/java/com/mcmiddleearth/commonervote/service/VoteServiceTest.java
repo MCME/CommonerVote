@@ -315,6 +315,8 @@ class VoteServiceTest extends ServiceTestBase {
         assertEquals(2, fresh.points());
         assertEquals(5, fresh.votesNeeded());
         assertEquals(100, fresh.validityDays());
+        assertEquals(2, fresh.staffWeight());
+        assertEquals(1, fresh.teamWeight());
 
         vote(elrond.getUniqueId(), bilbo.getUniqueId(), 0.2, 12, "nice");
         VoteView voted = dialogFor(elrond, bilbo);
@@ -344,6 +346,8 @@ class VoteServiceTest extends ServiceTestBase {
     void the_dialog_uses_the_stored_settings() throws SQLException {
         setting("votesNeeded", "10");
         setting("validityDays", "30");
+        setting("staffWeight", "3");
+        setting("teamWeight", "2");
         PlayerMock elrond = teamMember("Elrond");
         PlayerMock bilbo = guest("Bilbo_B");
         vote(OTHER_VOTER, bilbo.getUniqueId(), 0.3, 1);
@@ -352,6 +356,8 @@ class VoteServiceTest extends ServiceTestBase {
 
         assertEquals(10, view.votesNeeded());
         assertEquals(30, view.validityDays());
+        assertEquals(3, view.staffWeight());
+        assertEquals(2, view.teamWeight());
         assertEquals(30, view.percent());
         assertEquals(3, view.points());
     }

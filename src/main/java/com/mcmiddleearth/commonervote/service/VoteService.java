@@ -217,7 +217,7 @@ public final class VoteService {
                 ? Optional.of(clicker -> withdraw(clicker, target, name))
                 : Optional.empty();
         return new VoteView(name, VoteMath.percent(score), VoteMath.points(score, s.votesNeeded()), s.votesNeeded(),
-                s.validityDays(), votedDaysAgo, own.map(Vote::reason).orElse(""),
+                s.validityDays(), s.staffWeight(), s.teamWeight(), votedDaysAgo, own.map(Vote::reason).orElse(""),
                 (clicker, reason) -> cast(clicker, target, name, reason), onWithdraw);
     }
 
