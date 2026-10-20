@@ -330,6 +330,17 @@ class VoteCommandTest {
     }
 
     @Test
+    void vote_suggests_the_guests_online_only() {
+        PlayerMock team = teamMember("Bill_T");
+        guest("Bilbo_B");
+        withPermissions(guest("Bifur"), Permissions.EXEMPT); // a Commoner
+        teamMember("Bilba");
+
+        assertEquals(List.of("Bilbo_B"), tabComplete(team, "vote bi"),
+                "not the sender, nor a Commoner, nor another team member: the team does not vote for itself");
+    }
+
+    @Test
     void a_candidate_suggested_by_uuid_is_found_by_it() throws SQLException {
         PlayerMock admin = admin("Elrond");
         UUID stranger = UUID.randomUUID(); // never here, and LuckPerms has no name for them

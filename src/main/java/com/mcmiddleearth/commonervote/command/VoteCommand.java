@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
@@ -103,7 +104,7 @@ public final class VoteCommand {
     public LiteralCommandNode<CommandSourceStack> build() {
         return Commands.literal(NAME)
                 .executes(run(sender -> forPlayer(sender, votes::openMenu)))
-                .then(player(MAY_VOTE, this::onlinePlayers)
+                .then(player(MAY_VOTE, this::onlineGuests)
                         .executes(runNamed((sender, name) -> forPlayer(sender, p -> votes.openVote(p, name)))))
                 .then(Commands.literal("withdraw")
                         .requires(source(MAY_VOTE))
@@ -192,10 +193,26 @@ public final class VoteCommand {
 
     /** The names of the players online here whom the sender can see, that start with what is typed. */
     private CompletableFuture<Suggestions> onlinePlayers(CommandSender sender, SuggestionsBuilder builder) {
+        return online(sender, builder, player -> true);
+    }
+
+    /**
+     * {@link #onlinePlayers}, but only the guests, as on the team's guest list: not the sender, and nobody with
+     * {@link Permissions#EXEMPT} or {@link Permissions#VOTE}.
+     */
+    private CompletableFuture<Suggestions> onlineGuests(CommandSender sender, SuggestionsBuilder builder) {
+        UUID self = sender instanceof Player p ? p.getUniqueId() : null;
+        return online(sender, builder, player -> !player.getUniqueId().equals(self)
+                && !player.hasPermission(Permissions.EXEMPT) && !player.hasPermission(Permissions.VOTE));
+    }
+
+    /** The names of the players online here that pass {@code which}, whom the sender can see, that start as typed. */
+    private static CompletableFuture<Suggestions> online(CommandSender sender, SuggestionsBuilder builder,
+                                                         Predicate<Player> which) {
         String typed = builder.getRemainingLowerCase();
         for (Player online : Bukkit.getOnlinePlayers()) {
             boolean visible = !(sender instanceof Player viewer) || viewer.canSee(online);
-            if (visible && online.getName().toLowerCase(Locale.ROOT).startsWith(typed)) {
+            if (visible && which.test(online) && online.getName().toLowerCase(Locale.ROOT).startsWith(typed)) {
                 builder.suggest(online.getName());
             }
         }
