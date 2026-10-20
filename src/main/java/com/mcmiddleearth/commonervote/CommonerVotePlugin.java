@@ -10,6 +10,7 @@ import java.util.logging.Logger;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import com.mcmiddleearth.commonervote.command.VoteCommand;
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.listener.PlayerListener;
 import com.mcmiddleearth.commonervote.network.BungeeMessenger;
@@ -32,6 +33,7 @@ import com.mcmiddleearth.commonervote.storage.VoteStore;
 import com.mcmiddleearth.commonervote.ui.DialogPresenter;
 import com.mcmiddleearth.commonervote.ui.PaperDialogPresenter;
 
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.luckperms.api.LuckPerms;
 
 /**
@@ -124,6 +126,10 @@ public class CommonerVotePlugin extends JavaPlugin {
             settings.reload();
         }, SETTINGS_REFRESH_TICKS, SETTINGS_REFRESH_TICKS);
         getServer().getPluginManager().registerEvents(new PlayerListener(promotion, xp), this);
+        // The tree may outlive a disable, so the command checks isEnabled before it calls a service.
+        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event -> event.registrar().register(
+                new VoteCommand(voting, reviewing, configuring, this::isEnabled).build(), VoteCommand.DESCRIPTION,
+                List.of()));
     }
 
     /**
