@@ -3,6 +3,7 @@ package com.mcmiddleearth.commonervote;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
 import java.util.logging.Logger;
 
@@ -36,8 +37,9 @@ import net.luckperms.api.LuckPerms;
 /**
  * Builds the plugin on enable and stops its database thread on disable.
  * <p>
- * Each enable builds exactly one of every service: the promotion service remembers, for the whole server run, whose
- * promotion command has run, and the settings refresh only reloads the settings cache, never the services.
+ * Each enable builds exactly one of every service. The promotion service remembers, for the whole server run, whose
+ * promotion command has run. So the minute timer reloads only the settings cache (and retries the database setup
+ * until it has succeeded), and never rebuilds the services.
  * <p>
  * The protected {@code create} methods are where the plugin meets the outside world (the database, its own threads,
  * LuckPerms, the dialogs and the console). A test subclass replaces them with an in-memory database, inline executors
@@ -100,16 +102,27 @@ public class CommonerVotePlugin extends JavaPlugin {
         // Before anything can send: a send on a channel that is not registered throws.
         messenger.register();
 
-        // On the database thread. Until the reload is done, and for good if this fails, the cache holds the default
-        // settings; the executor has logged the failure.
-        db.supply(() -> {
+        // The setup and then the reload, both on the one database thread, which runs them in that order. The reload
+        // does not depend on the setup: if the setup fails, it still loads whatever settings can be read. Until a
+        // reload succeeds, the cache holds the default settings. The executor logs every failure.
+        AtomicBoolean setUpDone = new AtomicBoolean();
+        Runnable setUp = () -> db.supply(() -> {
             Schema.create(connections);
             settingsStore.seedMissing(Settings.defaults().toMap());
+            setUpDone.set(true);
             return null;
-        }).thenCompose(created -> settings.reload());
+        });
+        setUp.run();
+        settings.reload();
 
-        getServer().getScheduler().runTaskTimer(this, () -> settings.reload(), SETTINGS_REFRESH_TICKS,
-                SETTINGS_REFRESH_TICKS);
+        // Every minute, the setup runs again until it has succeeded once (in case the database was down at startup),
+        // followed by the reload, for the settings that another server saved.
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            if (!setUpDone.get()) {
+                setUp.run();
+            }
+            settings.reload();
+        }, SETTINGS_REFRESH_TICKS, SETTINGS_REFRESH_TICKS);
         getServer().getPluginManager().registerEvents(new PlayerListener(promotion, xp), this);
     }
 

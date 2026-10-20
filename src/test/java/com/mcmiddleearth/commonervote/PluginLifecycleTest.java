@@ -27,10 +27,14 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
+import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.service.PromotionService;
 import com.mcmiddleearth.commonervote.storage.ConnectionFactory;
 import com.mcmiddleearth.commonervote.storage.PromotionRecord;
 import com.mcmiddleearth.commonervote.storage.PromotionStore;
+import com.mcmiddleearth.commonervote.storage.Schema;
+import com.mcmiddleearth.commonervote.storage.SettingsStore;
+import com.mcmiddleearth.commonervote.support.FlakyDatabase;
 import com.mcmiddleearth.commonervote.support.TestCommonerVotePlugin;
 import com.mcmiddleearth.commonervote.support.TestDatabase;
 
@@ -43,7 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The plugin as a whole, enabled on a MockBukkit server through {@link TestCommonerVotePlugin}: the startup work, the
- * config.yml notes, the listener wiring, the settings refresh and the shutdown.
+ * config.yml notes, the listener wiring, the settings refresh, the proxy channel and the shutdown.
  */
 class PluginLifecycleTest {
 
@@ -150,6 +154,58 @@ class PluginLifecycleTest {
     }
 
     @Test
+    void a_failed_setup_is_retried_every_minute_until_it_succeeds() throws SQLException {
+        ConnectionFactory raw = TestDatabase.fresh();
+        FlakyDatabase flaky = new FlakyDatabase(raw);
+        flaky.goDown();
+        load(flaky);
+        assertEquals(Set.of(), tables(raw), "the database was down at startup");
+
+        server.getScheduler().performTicks(1200);
+        assertEquals(Set.of(), tables(raw), "still down a minute later");
+
+        flaky.recover();
+        server.getScheduler().performTicks(1200);
+        assertEquals(Set.of("commonervote_votes", "commonervote_settings", "commonervote_promotions"), tables(raw),
+                "the next minute's retry created the tables");
+        assertEquals(15, rows(raw, "commonervote_settings"), "and seeded the settings");
+
+        TestDatabase.exec(raw, "DROP TABLE commonervote_promotions");
+        server.getScheduler().performTicks(1200);
+        assertFalse(tables(raw).contains("commonervote_promotions"),
+                "once it has succeeded, the setup is not run again");
+    }
+
+    @Test
+    void a_failed_setup_does_not_hold_up_the_first_reload() throws SQLException {
+        ConnectionFactory raw = TestDatabase.fresh();
+        Schema.create(raw);
+        new SettingsStore(raw).seedMissing(Settings.defaults().toMap());
+        TestDatabase.exec(raw, "UPDATE commonervote_settings SET value = 'false' WHERE name = 'xpBar'");
+        FlakyDatabase flaky = new FlakyDatabase(raw);
+        flaky.failNext(1); // the setup's connection
+
+        TestCommonerVotePlugin plugin = load(flaky);
+        PlayerMock guest = server.addPlayer("Bilbo_B");
+
+        assertTrue(messages(plugin, Level.WARNING).stream().anyMatch(m -> m.contains("Communications link failure")),
+                "the setup failed: " + messages(plugin, Level.WARNING));
+        assertEquals(7, expGained(guest, 7), "the reload at startup still loaded the stored xpBar=false");
+    }
+
+    @Test
+    void bungeecord_channel_open_while_enabled() {
+        TestCommonerVotePlugin plugin = load();
+        assertTrue(server.getMessenger().isIncomingChannelRegistered(plugin, "BungeeCord"));
+        assertTrue(server.getMessenger().isOutgoingChannelRegistered(plugin, "BungeeCord"));
+
+        MockBukkit.unmock();
+
+        assertFalse(server.getMessenger().isIncomingChannelRegistered(plugin, "BungeeCord"));
+        assertFalse(server.getMessenger().isOutgoingChannelRegistered(plugin, "BungeeCord"));
+    }
+
+    @Test
     void disable_is_clean() {
         TestCommonerVotePlugin plugin = load();
 
@@ -175,6 +231,11 @@ class PluginLifecycleTest {
 
     private TestCommonerVotePlugin load() {
         return MockBukkit.loadWith(TestCommonerVotePlugin.class, description);
+    }
+
+    /** The plugin on the test's own database, made ready (or failing) before the plugin starts. */
+    private TestCommonerVotePlugin load(ConnectionFactory database) {
+        return MockBukkit.loadWith(TestCommonerVotePlugin.class, description, database);
     }
 
     /**
