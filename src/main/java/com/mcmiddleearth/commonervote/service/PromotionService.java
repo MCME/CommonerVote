@@ -226,7 +226,7 @@ public final class PromotionService {
         }
     }
 
-    /** Ends the player's session: a promotion under way for them is forgotten, and a blocked one may be logged again. */
+    /** Ends the player's session: a promotion under way is forgotten, and a blocked one may be logged again. */
     public void onQuit(Player p) {
         UUID id = p.getUniqueId();
         inProgress.remove(id);

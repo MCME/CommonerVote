@@ -533,6 +533,7 @@ class PromotionServiceTest extends ServiceTestBase {
         Queue<Runnable> steps = new ArrayDeque<>();
         main = steps::add;
         build();
+        presenter.clear();
         PlayerMock bilbo = guest("Bilbo_B");
 
         promotion.checkAutoPromotion(bilbo, 1.0);
