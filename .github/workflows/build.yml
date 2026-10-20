@@ -5,6 +5,10 @@ on:
     branches: [master, development, 'revision/**']
   pull_request:
 
+# The build only reads the repository.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-26.04
