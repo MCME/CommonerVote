@@ -62,6 +62,11 @@ public final class DialogSpecs {
     static final int LONG_TEXT_LENGTH = 1024;
     /** How long the buttons of the settings dialogs work: editing the long texts can take a while. */
     static final Duration EDITING_CLICK_LIFETIME = Duration.ofMinutes(30);
+    /**
+     * How long the buttons of the team's guest list and of the vote dialog work: a voter may go and look at the guest's
+     * build before voting.
+     */
+    static final Duration VOTING_CLICK_LIFETIME = Duration.ofMinutes(15);
 
     private static final ButtonSpec CLOSE = closing("Close");
     private static final ButtonSpec CANCEL = closing("Cancel");
@@ -79,7 +84,7 @@ public final class DialogSpecs {
                         : progress(row.name(), row.percent()), null, click(row.onClick())))
                 .toList();
         return new DialogSpec(text("Commoner votes"), List.of(text("Guests on this server. Click one to vote.")),
-                List.of(), buttons, CLOSE, 1);
+                List.of(), buttons, CLOSE, 1, VOTING_CLICK_LIFETIME);
     }
 
     /**
@@ -101,7 +106,8 @@ public final class DialogSpecs {
         List<ButtonSpec> buttons = new ArrayList<>();
         buttons.add(button(view.votedDaysAgo().isPresent() ? "Renew vote" : "Cast vote", cast));
         view.onWithdraw().ifPresent(withdraw -> buttons.add(button("Withdraw my vote", click(withdraw))));
-        return new DialogSpec(text("Vote for " + view.name()), body, List.of(reason), buttons, CANCEL, 2);
+        return new DialogSpec(text("Vote for " + view.name()), body, List.of(reason), buttons, CANCEL, 2,
+                VOTING_CLICK_LIFETIME);
     }
 
     // ---- the guest ----

@@ -541,9 +541,20 @@ class DialogSpecsTest {
         assertEquals(Duration.ofMinutes(30),
                 DialogSpecs.settings(new SettingsView(s, p -> { }, (p, f) -> { })).clickLifetime());
         assertEquals(Duration.ofMinutes(30), DialogSpecs.texts(new TextsView(s, (p, f) -> { })).clickLifetime());
-        assertEquals(Duration.ofMinutes(5), DialogSpecs.vote(newVote(r -> { })).clickLifetime());
+    }
+
+    @Test
+    void the_team_dialogs_keep_their_clicks_for_a_look_at_the_build() {
+        assertEquals(Duration.ofMinutes(15), DialogSpecs.vote(newVote(r -> { })).clickLifetime());
+        assertEquals(Duration.ofMinutes(15), DialogSpecs.candidates(new CandidateListView(List.of(
+                new CandidateListView.Row(UUID.randomUUID(), "Bilbo_B", 80, false, p -> { })))).clickLifetime());
+    }
+
+    @Test
+    void every_other_dialog_keeps_its_clicks_five_minutes() {
+        Set<String> longer = Set.of("Vote settings", "Texts and links", "Commoner votes", "Vote for Bilbo_B");
         assertEquals(Duration.ofMinutes(5), everySpec()
-                .filter(spec -> !Set.of("Vote settings", "Texts and links").contains(plain(spec.title())))
+                .filter(spec -> !longer.contains(plain(spec.title())))
                 .map(DialogSpec::clickLifetime).distinct().reduce((a, b) -> {
                     throw new AssertionError("more than one lifetime: " + a + ", " + b);
                 }).orElseThrow());

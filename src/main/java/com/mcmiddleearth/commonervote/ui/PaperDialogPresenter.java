@@ -53,10 +53,10 @@ import net.kyori.adventure.text.event.ClickEvent;
  * button is the exit button. The Escape key runs the exit button's action too.
  * <p>
  * <b>Buttons.</b> A {@link Callback} is a custom click that can be used once, within the spec's
- * {@link DialogSpec#clickLifetime()} (five minutes; thirty for the settings dialogs). It does nothing when the plugin
- * has been disabled since (Paper keeps click callbacks after a disable, so a reload would otherwise leave
- * old buttons running against dead services) or when the clicker is not a player; the handler then gets the player
- * and the submitted values. An {@link OpenUrl} is a static open-URL click and a {@link Close} has no action, so the
+ * {@link DialogSpec#clickLifetime()} (five minutes; fifteen for the team's guest list and the vote dialog; thirty for
+ * the settings dialogs). It does nothing when the plugin has been disabled since (Paper keeps click callbacks after a
+ * disable, so a reload would otherwise leave old buttons running against dead services) or when the clicker is not a
+ * player; the handler then gets the player and the submitted values. An {@link OpenUrl} is a static open-URL click and a {@link Close} has no action, so the
  * button just closes the dialog. Dialog callbacks run on the main thread.
  * <p>
  * <b>Inputs.</b> A {@link NumberInput} is a slider with step 1 and the label {@code Votes needed: 5}; a
