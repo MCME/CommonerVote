@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
+import com.mcmiddleearth.commonervote.network.Messenger;
 import com.mcmiddleearth.commonervote.network.Messenger.Update;
 import com.mcmiddleearth.commonervote.rank.RankService;
 import com.mcmiddleearth.commonervote.storage.PromotionRecord;
@@ -51,6 +52,12 @@ class PromotionServiceTest extends ServiceTestBase {
 
     private List<LogRecord> infoNaming(String text) {
         return logger.records(Level.INFO).stream().filter(r -> r.getMessage().contains(text)).toList();
+    }
+
+    /** The WARNING lines the database executor writes for a failed database task. */
+    private List<LogRecord> unavailableWarnings() {
+        return logger.records(Level.WARNING).stream()
+                .filter(r -> r.getMessage().startsWith("The vote database is unavailable")).toList();
     }
 
     // ---- auto-promotion ----
@@ -327,6 +334,21 @@ class PromotionServiceTest extends ServiceTestBase {
     }
 
     @Test
+    void promote_now_after_an_auto_promotion_in_this_run() {
+        PlayerMock elrond = staff("Elrond");
+        PlayerMock bilbo = guest("Bilbo_B");
+        promotion.checkAutoPromotion(bilbo, 1.0);
+        bilbo.disconnect();
+        promotion.onQuit(bilbo); // drops the session's claim; LuckPerms has not applied the command yet
+
+        promotion.promoteNow(elrond, bilbo.getUniqueId(), "Bilbo_B");
+
+        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(Messages.targetExempt("Bilbo_B"), elrond.nextComponentMessage());
+        assertEquals(1, messenger.announcements().size());
+    }
+
+    @Test
     void promote_now_goes_on_when_the_target_joins_meanwhile() throws SQLException {
         QueueExecutor queue = new QueueExecutor();
         main = queue;
@@ -515,17 +537,32 @@ class PromotionServiceTest extends ServiceTestBase {
         QueueExecutor queue = new QueueExecutor();
         main = queue;
         build();
-        PlayerMock bilbo = guest("Bilbo_B");
+        PlayerMock bilbo = guest("Bilbo_B"); // no votes left by the time of the new session
 
-        promotion.checkAutoPromotion(bilbo, 1.0);
+        promotion.checkAutoPromotion(bilbo, 1.0); // a score seen in the last session
         bilbo.disconnect();
         promotion.onQuit(bilbo);
-        bilbo.reconnect();
+        bilbo.reconnect(); // the same Player object reads as online again, as in Paper
         promotion.onJoin(bilbo);
-        promotion.checkAutoPromotion(bilbo, 1.0);
         queue.runAll();
 
-        assertEquals(List.of(COMMAND), commands.commands(), "only the new session's check promotes");
+        assertEquals(List.of(), commands.commands(), "the last session's check does not promote in this one");
+    }
+
+    @Test
+    void a_rejoin_before_luckperms_applied_does_not_promote_again() throws SQLException {
+        PlayerMock bilbo = guest("Bilbo_B");
+        scoreOf(bilbo, 1.0);
+        promotion.checkAutoPromotion(bilbo, 1.0);
+
+        bilbo.disconnect();
+        promotion.onQuit(bilbo);
+        bilbo.reconnect(); // LuckPerms has not applied the command yet: still a guest in {default}
+        promotion.onJoin(bilbo);
+        promotion.checkAutoPromotion(bilbo, 1.0);
+
+        assertEquals(List.of(COMMAND), commands.commands(), "the command runs once per player per server run");
+        assertEquals(1, messenger.announcements().size());
     }
 
     @Test
@@ -562,7 +599,7 @@ class PromotionServiceTest extends ServiceTestBase {
     // ---- failures ----
 
     @Test
-    void database_down_on_join_and_update() throws SQLException {
+    void database_down_on_join_and_update_is_silent() throws SQLException {
         breakDatabase();
         presenter.clear();
         PlayerMock bilbo = guest("Bilbo_B");
@@ -572,34 +609,44 @@ class PromotionServiceTest extends ServiceTestBase {
         assertDoesNotThrow(() -> promotion.onRemoteUpdate(bilbo, Update.VOTED));
         assertDoesNotThrow(() -> promotion.onJoin(frodo));
 
-        assertEquals(Messages.databaseDown(), bilbo.nextComponentMessage());
-        assertEquals(Messages.databaseDown(), bilbo.nextComponentMessage());
-        assertEquals(Messages.databaseDown(), frodo.nextComponentMessage());
+        assertNull(bilbo.nextComponentMessage(), "the player did not start these flows");
+        assertNull(frodo.nextComponentMessage());
         assertNull(bilbo.nextActionBar());
+        assertNull(presenter.last(bilbo, WelcomeView.class));
         assertNull(presenter.last(frodo, WelcomeView.class));
         assertEquals(List.of(), commands.commands());
+        assertFalse(unavailableWarnings().isEmpty(), "the database executor logs the failures");
     }
 
     @Test
-    void database_down_after_the_command_lets_a_later_check_retry() throws SQLException {
+    void database_down_after_the_command_still_finishes_the_promotion() throws SQLException {
         breakDatabase();
         presenter.clear();
         PlayerMock bilbo = guest("Bilbo_B");
+        bilbo.setLevel(3);
+        bilbo.setExp(0.8f);
 
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND), commands.commands(), "the record is written after the command");
-        assertEquals(Messages.databaseDown(), bilbo.nextComponentMessage());
-        assertNull(presenter.last(bilbo, WelcomeView.class));
-        assertEquals(List.of(), messenger.announcements());
+        assertEquals(List.of(COMMAND), commands.commands());
+        assertNotNull(presenter.last(bilbo, WelcomeView.class), "the command ran, so the promotion goes on");
+        assertEquals(0, bilbo.getLevel());
+        assertEquals(0.0f, bilbo.getExp());
+        assertEquals("★ Bilbo_B has been promoted to Commoner!", Texts.plain(messenger.announcements().get(0)));
+        assertNull(bilbo.nextComponentMessage(), "no database line next to the welcome");
+        assertFalse(unavailableWarnings().isEmpty(), "the database executor logs the failed save");
 
+        // A later check, in a new session, before LuckPerms has applied the command.
+        promotion.onQuit(bilbo);
+        promotion.onJoin(bilbo);
         promotion.checkAutoPromotion(bilbo, 1.0);
 
-        assertEquals(List.of(COMMAND, COMMAND), commands.commands(), "the failed promotion no longer holds the player");
+        assertEquals(List.of(COMMAND), commands.commands(), "never a second command");
+        assertEquals(1, messenger.announcements().size());
     }
 
     @Test
-    void database_down_on_promote_now() throws SQLException {
+    void database_down_on_promote_now_still_confirms() throws SQLException {
         breakDatabase();
         PlayerMock elrond = staff("Elrond");
         UUID bilbo = UUID.randomUUID();
@@ -607,9 +654,32 @@ class PromotionServiceTest extends ServiceTestBase {
 
         promotion.promoteNow(elrond, bilbo, "Bilbo_B");
 
-        assertEquals(Messages.databaseDown(), elrond.nextComponentMessage());
-        assertNull(elrond.nextComponentMessage(), "no success line");
-        assertEquals(List.of(), messenger.announcements());
+        assertEquals(List.of(COMMAND), commands.commands());
+        assertEquals(Messages.promoted("Bilbo_B"), elrond.nextComponentMessage());
+        assertNull(elrond.nextComponentMessage(), "no database line next to the confirmation");
+        assertEquals(1, messenger.announcements().size());
+    }
+
+    @Test
+    void a_failed_announcement_comes_after_the_local_steps() throws SQLException {
+        Messenger broken = mock(Messenger.class);
+        doThrow(new IllegalStateException("channel not registered")).when(broken).announce(any());
+        PromotionService service = new PromotionService(db, main, votes, promotions, settings, ranks, broken,
+                presenter, xp, commands, logger, () -> now);
+        PlayerMock elrond = staff("Elrond");
+        PlayerMock bilbo = guest("Bilbo_B");
+        bilbo.setExp(0.8f);
+
+        assertDoesNotThrow(() -> service.promoteNow(elrond, bilbo.getUniqueId(), "Bilbo_B"));
+
+        assertNotNull(presenter.last(bilbo, WelcomeView.class));
+        assertTrue(promotionOf(bilbo.getUniqueId()).orElseThrow().welcomed());
+        assertEquals(Messages.promoted("Bilbo_B"), elrond.nextComponentMessage());
+        assertEquals(0.0f, bilbo.getExp());
+        List<LogRecord> warnings = logger.records(Level.WARNING);
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.get(0).getMessage().contains("Bilbo_B"));
+        assertEquals(List.of(), logger.records(Level.SEVERE));
     }
 
     @Test
@@ -624,7 +694,7 @@ class PromotionServiceTest extends ServiceTestBase {
         service.promoteNow(elrond, UUID.randomUUID(), "Frodo99");
 
         assertEquals(List.of(), commands.commands());
-        assertEquals(Messages.databaseDown(), bilbo.nextComponentMessage());
+        assertNull(bilbo.nextComponentMessage(), "the guest did not start the auto-check");
         assertEquals(Messages.databaseDown(), elrond.nextComponentMessage());
         assertEquals(2, logger.records(Level.WARNING).size(), "nothing else logs a LuckPerms failure");
     }

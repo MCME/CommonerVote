@@ -47,14 +47,17 @@ import net.kyori.adventure.text.Component;
  * they are at that moment. Auto-promotion and "Promote now" both go through it.
  * <p>
  * LuckPerms applies the command asynchronously, so for a moment after it a promoted player still looks like a guest.
- * The players whose promotion is under way or done in this session are kept in memory (until they quit or join) and
- * are not promoted again in that time.
+ * The command therefore runs at most once per player per server run, and a player whose promotion is under way in this
+ * session is not checked again until they quit or join.
  * <p>
  * The public methods are called on the main thread. Database work runs on the {@link DbExecutor}; the rank service
  * answers on its own threads; every continuation that touches Bukkit comes back through {@code main}, and checks that
- * the player is still online (and still in the same session) before it does anything for them. A database or rank
- * service failure tells the player or admin concerned that the database is unreachable, and leaves nothing half done
- * except as described at {@link #promoteIfAllowed}.
+ * the player is still online (and still in the same session) before it does anything for them.
+ * <p>
+ * Failures: the {@link DbExecutor} logs database failures, and rank service failures are logged here. Only an admin's
+ * "Promote now" tells anyone that the database is unreachable; the flows a player did not start (join handling,
+ * forwarded updates, auto-promotion) stay silent towards them. Once the command has run, a failure changes nothing
+ * that follows it (see {@link #promoteIfAllowed}).
  */
 public final class PromotionService {
 
@@ -77,6 +80,14 @@ public final class PromotionService {
      * while its own token is still the one here, so work started before a quit never acts on a later session.
      */
     private final Map<UUID, Object> inProgress = new ConcurrentHashMap<>();
+
+    /**
+     * The players whose promotion command has run since the server started. Never cleared, not even by a quit or a
+     * join: until LuckPerms has applied the command the player still looks like a guest, also in a new session, and
+     * the command must never run twice. A player demoted by hand later in the same run is promoted again only after a
+     * restart.
+     */
+    private final Set<UUID> commandRan = ConcurrentHashMap.newKeySet();
 
     /** The players whose blocked auto-promotion has been logged in this session. */
     private final Set<UUID> blockLogged = ConcurrentHashMap.newKeySet();
@@ -103,10 +114,11 @@ public final class PromotionService {
     }
 
     /**
-     * Promotes {@code p} if auto-promotion is on, {@code score} is a whole promotion, {@code p} is not exempt and not
-     * already being promoted in this session, and the guard allows it. A guard refusal is logged once per player per
-     * session at INFO and does not hold the player: a later check (after a vote, say, or once the group was made
-     * promotable) tries again.
+     * Promotes {@code p} if auto-promotion is on, {@code score} is a whole promotion, {@code p} is not exempt, not
+     * already being promoted in this session and not promoted earlier in this server run, and the guard allows it. A
+     * guard refusal is logged once per player per session at INFO and does not hold the player: a later check (after
+     * a vote, say, or once the group was made promotable) tries again. The player did not ask for this check, so a
+     * failure is only logged, never shown to them.
      */
     public void checkAutoPromotion(Player p, double score) {
         if (!settings.get().autoPromote() || !VoteMath.reachesPromotion(score)
@@ -129,19 +141,21 @@ public final class PromotionService {
             if (error != null) {
                 logRankFailure(p.getName(), error);
                 inProgress.remove(id, attempt);
-                p.sendMessage(Messages.databaseDown());
                 return;
             }
-            PromotionGuard.Result guard = promoteIfAllowed(id, p.getName(), groups, Source.AUTO, null, attempt);
-            guard.blockingGroup().ifPresent(group -> logBlockedOnce(id, p.getName(), group));
+            if (promoteIfAllowed(id, p.getName(), groups, Source.AUTO, null, attempt)
+                    instanceof Outcome.Blocked blocked) {
+                logBlockedOnce(id, p.getName(), blocked.group());
+            }
         });
     }
 
     /**
      * Promotes {@code target} at an admin's request, online or not, through the same guard as auto-promotion. The
-     * admin is told the outcome: promoted, blocked by a group, already exempt (or already being promoted), or the
-     * database being unreachable. A target who is online here sees the welcome at once; anyone else sees it at their
-     * next join on any server. Does not check the admin's permission: the caller has done that.
+     * admin is told the outcome: promoted; blocked by a group; already a Commoner (exempt, being promoted, or promoted
+     * earlier in this server run); or, when LuckPerms cannot be asked, the database being unreachable. A target who
+     * is online here sees the welcome at once; anyone else sees it at their next join on any server. Does not check
+     * the admin's permission: the caller has done that.
      *
      * @param name the target's name, as the promotion command and the messages use it
      */
@@ -173,9 +187,13 @@ public final class PromotionService {
                 tell(admin, Messages.targetExempt(name));
                 return;
             }
-            PromotionGuard.Result guard = promoteIfAllowed(target, name, checked.groups(), Source.MANUAL, admin,
-                    attempt);
-            guard.blockingGroup().ifPresent(group -> tell(admin, Messages.promoteBlocked(name, group)));
+            switch (promoteIfAllowed(target, name, checked.groups(), Source.MANUAL, admin, attempt)) {
+                case Outcome.Blocked blocked -> tell(admin, Messages.promoteBlocked(name, blocked.group()));
+                case Outcome.AlreadyPromoted _ -> tell(admin, Messages.targetExempt(name));
+                case Outcome.Promoted _ -> {
+                    // The admin is told once the record has been written.
+                }
+            }
         });
     }
 
@@ -187,7 +205,9 @@ public final class PromotionService {
      *       recipient (otherwise every Commoner's join would add a row);</li>
      *   <li>a player who is not exempt but has a record loses it, and is a candidate again.</li>
      * </ul>
-     * Starts a new session for the player: whatever promotion was under way for them is forgotten.
+     * A welcome shown here also empties the old progress meter (when the XP bar is the meter). Starts a new session
+     * for the player: a promotion that was under way for them is forgotten, though a command that already ran in this
+     * server run is never run again. A database failure is only logged.
      */
     public void onJoin(Player p) {
         UUID id = p.getUniqueId();
@@ -196,14 +216,11 @@ public final class PromotionService {
         if (p.hasPermission(Permissions.EXEMPT)) {
             long now = clock.getAsLong();
             onMain(db.supply(() -> welcomePending(id, now)), (pending, error) -> {
-                if (!p.isOnline()) {
+                if (error != null || !p.isOnline() || !pending) {
                     return;
                 }
-                if (error != null) {
-                    p.sendMessage(Messages.databaseDown());
-                } else if (pending) {
-                    welcome(p);
-                }
+                welcome(p);
+                releaseXp(p);
             });
         } else {
             long since = validSince();
@@ -213,11 +230,7 @@ public final class PromotionService {
                 }
                 return score(id, since);
             }), (score, error) -> {
-                if (!p.isOnline()) {
-                    return;
-                }
-                if (error != null) {
-                    p.sendMessage(Messages.databaseDown());
+                if (error != null || !p.isOnline()) {
                     return;
                 }
                 xp.refresh(p, score);
@@ -241,11 +254,7 @@ public final class PromotionService {
         UUID id = p.getUniqueId();
         long since = validSince();
         onMain(db.supply(() -> score(id, since)), (score, error) -> {
-            if (!p.isOnline()) {
-                return;
-            }
-            if (error != null) {
-                p.sendMessage(Messages.databaseDown());
+            if (error != null || !p.isOnline()) {
                 return;
             }
             if (kind == Messenger.Update.VOTED) {
@@ -257,56 +266,62 @@ public final class PromotionService {
     }
 
     /**
-     * The one place the promotion command runs. It runs only if {@link PromotionGuard} allows {@code groups}; a
-     * refusal releases the claim and is returned for the caller to report.
+     * The one place the promotion command runs. It runs at most once per player per server run, and only if
+     * {@link PromotionGuard} allows {@code groups}; a refusal releases the claim and is returned for the caller to
+     * report.
      * <p>
-     * The steps, after the guard: the command; the record, written on the database thread with
-     * {@code welcomed=false}; then, back on the main thread, the announcement, the admin's confirmation and, for a
-     * player online here, the welcome (see {@link #welcome}). The claim stays after a success, so the player is not
-     * promoted twice before LuckPerms has applied the command.
+     * The steps, after the checks: the command; the record, written on the database thread with
+     * {@code welcomed=false}; then, back on the main thread once the write is over, however it went, the local steps
+     * first (for a player online here the welcome, see {@link #welcome}; the admin's confirmation; for that player the
+     * emptied progress meter) and the network announcement last. The claim stays, so the player is not promoted again
+     * in this session.
      * <p>
-     * If the record cannot be written, the player (auto) or the admin (manual) is told the database is unreachable,
-     * the claim is released so a later check can try again, and nothing else happens. The command has run by then:
-     * once LuckPerms has applied it the player is exempt, and their next join records them as {@code detected}.
+     * A record that cannot be written changes none of this: the command has run, so the promotion goes on. The
+     * {@link DbExecutor} logs the failure, and nobody is told the database is down next to a welcome or a
+     * confirmation. Once LuckPerms has applied the command the player is exempt, and their next join records them as
+     * {@code detected}.
      *
      * @param admin who asked for it, or {@code null} for an auto-promotion
      */
-    private PromotionGuard.Result promoteIfAllowed(UUID id, String name, Set<String> groups, Source source,
-                                                   CommandSender admin, Object attempt) {
+    private Outcome promoteIfAllowed(UUID id, String name, Set<String> groups, Source source, CommandSender admin,
+                                     Object attempt) {
+        if (commandRan.contains(id)) {
+            inProgress.remove(id, attempt);
+            return new Outcome.AlreadyPromoted();
+        }
         Settings s = settings.get();
         PromotionGuard.Result guard = PromotionGuard.check(groups, s.promotableGroups());
         if (!guard.allowed()) {
             inProgress.remove(id, attempt);
-            return guard;
+            return new Outcome.Blocked(guard.blockingGroup().orElseThrow());
         }
         String command = s.promotionCommand().replace("<player>", name).replace("<group>", s.commonerGroup());
         logger.info("Promoting " + name + " (" + source.name().toLowerCase(Locale.ROOT) + "): " + command);
+        // Marked before it runs: if running it throws, it may still have taken effect, so it is never run again.
+        commandRan.add(id);
         runner.runConsole(command);
         PromotionRecord record = new PromotionRecord(id, clock.getAsLong(), source, false);
         onMain(db.supply(() -> {
             promotions.save(record);
             return null;
         }), (saved, error) -> {
-            if (error != null) {
-                inProgress.remove(id, attempt);
-                tell(admin != null ? admin : Bukkit.getPlayer(id), Messages.databaseDown());
-                return;
-            }
-            messenger.announce(Texts.mini(s.announceText(), Texts.placeholders(s, name)));
-            if (admin != null) {
-                tell(admin, Messages.promoted(name));
-            }
             Player promoted = Bukkit.getPlayer(id);
             if (promoted != null) {
                 welcome(promoted);
             }
+            if (admin != null) {
+                tell(admin, Messages.promoted(name));
+            }
+            if (promoted != null) {
+                releaseXp(promoted);
+            }
+            announce(s, name);
         });
-        return guard;
+        return new Outcome.Promoted();
     }
 
     /**
-     * Shows the welcome, empties the progress meter (only when the XP bar is the meter, as otherwise the XP is the
-     * player's own) and records that the player has seen the welcome. If that record cannot be written, the
+     * Shows the welcome and records that the player has seen it. If that record cannot be written, the
      * {@link DbExecutor} logs it and the welcome comes again at the next join; the player is not told, as there is
      * nothing for them to try again.
      */
@@ -314,14 +329,33 @@ public final class PromotionService {
         Settings s = settings.get();
         presenter.showWelcome(p, new WelcomeView(Texts.mini(s.welcomeText(), Texts.placeholders(s, p.getName())),
                 s.rulesUrl()));
-        if (s.xpBar()) {
-            xp.release(p);
-        }
         UUID id = p.getUniqueId();
         db.supply(() -> {
             promotions.markWelcomed(id);
             return null;
         });
+    }
+
+    /**
+     * Empties the progress meter of a player who has just become a Commoner, but only while the XP bar is the meter:
+     * with the switch off, the XP is the player's own.
+     */
+    private void releaseXp(Player p) {
+        if (settings.get().xpBar()) {
+            xp.release(p);
+        }
+    }
+
+    /**
+     * Announces the promotion to the network. Last of the steps, and on its own: a failure to send it is logged and
+     * changes nothing else.
+     */
+    private void announce(Settings s, String name) {
+        try {
+            messenger.announce(Texts.mini(s.announceText(), Texts.placeholders(s, name)));
+        } catch (RuntimeException e) {
+            logger.log(Level.WARNING, "Could not announce the promotion of " + name, e);
+        }
     }
 
     /**
@@ -371,7 +405,7 @@ public final class PromotionService {
 
     /** Sends the message, unless the receiver is a player who has gone offline. */
     private static void tell(CommandSender receiver, Component message) {
-        if (receiver == null || receiver instanceof Player p && !p.isOnline()) {
+        if (receiver instanceof Player p && !p.isOnline()) {
             return;
         }
         receiver.sendMessage(message);
@@ -392,5 +426,21 @@ public final class PromotionService {
 
     /** What "Promote now" needs to know about its target. */
     private record Target(boolean exempt, Set<String> groups) {
+    }
+
+    /** What {@link #promoteIfAllowed} did. */
+    private sealed interface Outcome {
+
+        /** The command ran. */
+        record Promoted() implements Outcome {
+        }
+
+        /** Not run: the command already ran for this player in this server run. */
+        record AlreadyPromoted() implements Outcome {
+        }
+
+        /** Not run: the guard refused because the player has this group. */
+        record Blocked(String group) implements Outcome {
+        }
     }
 }
