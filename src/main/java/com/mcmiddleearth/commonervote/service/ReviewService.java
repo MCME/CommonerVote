@@ -1,5 +1,6 @@
 package com.mcmiddleearth.commonervote.service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,9 +44,10 @@ import net.kyori.adventure.text.Component;
  * gets the same in plain text, without the confirmation step ({@link #printReview}, {@link #clear(CommandSender,
  * String)}, {@link #promote(CommandSender, String)}).
  * <p>
- * A candidate is anyone with valid votes who is not recorded as promoted, online on this server or not, the closest
- * to a promotion first, at most 50 of them. The name shown for a player follows {@link PlayerNames}: the one this
- * server holds in memory, else the rank service's, else the player's UUID, which can also be typed back.
+ * A candidate is anyone with valid votes who is neither recorded as promoted nor exempt (checked through the rank
+ * service for a player who is not online here), online on this server or not, the closest to a promotion first, at
+ * most 50 of them. The name shown for a player follows {@link PlayerNames}: the one this server holds in memory, else
+ * the rank service's, else the player's UUID, which can also be typed back.
  * <p>
  * The public methods are called on the main thread. Database work runs on the {@link DbExecutor}, the rank service
  * answers on its own threads, and every continuation that touches Bukkit comes back through {@code main} and checks
@@ -131,9 +133,54 @@ public final class ReviewService {
      */
     private CompletableFuture<List<Candidate>> candidates() {
         Settings s = settings.get();
+        return candidateScores(s).thenComposeAsync(scores -> described(scores, s), main);
+    }
+
+    /**
+     * The candidates' scores, highest first, at most {@link #MAX_CANDIDATES}: everyone with valid votes and no
+     * promotion record, except the exempt players. A Commoner promoted before 2.0, or by hand, keeps their votes and
+     * gets a record only at their next join; with a whole promotion's worth of votes they would top the list. So the
+     * players are checked in score order, as many at a time as places are left, until the list is full or nobody is
+     * left; the exempt ones take no place.
+     */
+    private CompletableFuture<List<RecipientScore>> candidateScores(Settings s) {
         long since = VoteMath.validSince(clock.getAsLong(), s.validityDays());
-        return db.supply(() -> votes.candidates(since, MAX_CANDIDATES))
-                .thenComposeAsync(scores -> described(scores, s), main);
+        return db.supply(() -> votes.candidates(since, Integer.MAX_VALUE))
+                .thenComposeAsync(all -> withoutExempt(all, 0, List.of()), main);
+    }
+
+    /**
+     * Runs on the main thread: {@code kept}, followed by the players of {@code all} from index {@code from} on who are
+     * not exempt, up to {@link #MAX_CANDIDATES} in all.
+     */
+    private CompletableFuture<List<RecipientScore>> withoutExempt(List<RecipientScore> all, int from,
+                                                                  List<RecipientScore> kept) {
+        int placesLeft = MAX_CANDIDATES - kept.size();
+        if (placesLeft <= 0 || from >= all.size()) {
+            return CompletableFuture.completedFuture(kept);
+        }
+        List<RecipientScore> next = all.subList(from, Math.min(all.size(), from + placesLeft));
+        List<CompletableFuture<Boolean>> exempt = next.stream().map(score -> isExempt(score.recipient())).toList();
+        return CompletableFuture.allOf(exempt.toArray(CompletableFuture<?>[]::new)).thenComposeAsync(done -> {
+            List<RecipientScore> more = new ArrayList<>(kept);
+            for (int i = 0; i < next.size(); i++) {
+                if (!exempt.get(i).join()) {
+                    more.add(next.get(i));
+                }
+            }
+            return withoutExempt(all, from + next.size(), List.copyOf(more));
+        }, main);
+    }
+
+    /**
+     * Whether the player is past the vote: by their permissions when they are online here, otherwise through the rank
+     * service. Call this on the main thread.
+     */
+    private CompletableFuture<Boolean> isExempt(UUID player) {
+        Player online = Bukkit.getPlayer(player);
+        return online != null
+                ? CompletableFuture.completedFuture(online.hasPermission(Permissions.EXEMPT))
+                : ranks.isExempt(player);
     }
 
     /** Runs on the main thread, since the names come from Bukkit. */
@@ -159,8 +206,7 @@ public final class ReviewService {
      * service cannot be reached, the answer is no names.
      */
     public CompletableFuture<List<String>> candidateNames() {
-        long since = VoteMath.validSince(clock.getAsLong(), settings.get().validityDays());
-        return db.supply(() -> votes.candidates(since, MAX_CANDIDATES))
+        return candidateScores(settings.get())
                 .thenComposeAsync(scores -> {
                     List<UUID> ids = scores.stream().map(RecipientScore::recipient).toList();
                     return names.display(ids, UUID::toString)

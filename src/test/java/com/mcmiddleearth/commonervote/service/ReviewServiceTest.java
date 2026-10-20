@@ -222,6 +222,51 @@ class ReviewServiceTest extends ServiceTestBase {
         assertEquals(50, reviewing.candidateNames().join().size());
     }
 
+    @Test
+    void exempt_players_with_valid_votes_are_no_candidates() throws SQLException {
+        // Promoted before 2.0 or by hand: the votes stay, and the record only comes at their next join.
+        PlayerMock elrond = admin("Elrond");
+        UUID frodo = remoteGuest("Frodo99");
+        ranks.setExempt(frodo, true).setGroups(frodo, "commoner");
+        PlayerMock sam = guest("Sam"); // online here, exempt by his permissions
+        sam.addAttachment(plugin, Permissions.EXEMPT, true);
+        UUID bilbo = remoteGuest("Bilbo_B");
+        vote(VOTER, frodo, 1.0, 10);
+        vote(VOTER, sam.getUniqueId(), 0.8, 10);
+        vote(VOTER, bilbo, 0.4, 1);
+
+        reviewing.openList(elrond);
+        reviewing.printReview(server.getConsoleSender(), Optional.empty());
+
+        assertEquals(List.of("Bilbo_B 40 -"), rowsOf(presenter.last(elrond, ReviewListView.class)));
+        assertEquals(List.of("Bilbo_B"), reviewing.candidateNames().join());
+        assertEquals("- Bilbo_B: 40%", Texts.plain(server.getConsoleSender().nextComponentMessage()));
+        assertNull(server.getConsoleSender().nextComponentMessage());
+    }
+
+    @Test
+    void exempt_players_do_not_take_the_places_of_candidates() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+        for (int i = 0; i < 30; i++) {
+            UUID commoner = remoteGuest(String.format("K%02d", i));
+            ranks.setExempt(commoner, true);
+            vote(VOTER, commoner, 1.0, 1); // at the top of the scores
+        }
+        for (int i = 0; i < 51; i++) {
+            vote(VOTER, remoteGuest(String.format("C%02d", i)), 0.1 + i * 0.01, 1);
+        }
+
+        reviewing.openList(elrond);
+
+        List<String> rows = rowsOf(presenter.last(elrond, ReviewListView.class));
+        assertEquals(50, rows.size(), "the exempt players are left out before the list is cut to 50");
+        assertEquals("C50 60 -", rows.get(0));
+        assertEquals("C01 11 -", rows.get(49));
+        List<String> names = reviewing.candidateNames().join();
+        assertEquals(50, names.size());
+        assertTrue(names.stream().noneMatch(name -> name.startsWith("K")), names.toString());
+    }
+
     // ---- the votes for one candidate ----
 
     @Test

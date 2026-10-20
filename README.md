@@ -31,9 +31,10 @@ Everything is done with Paper dialogs and chat. Version 2.0 is a rewrite for Pap
   Voting for yourself, for a Commoner or higher, or for a name nobody has used is refused with a chat line.
 
 **For admins**
-- `/vote review` lists everyone with valid votes who has not been promoted (at most 50, closest to 100 % first). The
-  detail dialog shows each valid vote: the voter, whether it was a staff vote, its age, when it ends and the reason.
-  From there an admin can promote the player now or clear their votes, each after an "Are you sure?".
+- `/vote review` lists everyone with valid votes who is still a guest: not promoted, and without `commonervote.exempt`,
+  which LuckPerms answers for a player who is offline (at most 50, closest to 100 % first). The detail dialog shows
+  each valid vote: the voter, whether it was a staff vote, its age, when it ends and the reason. From there an admin
+  can promote the player now or clear their votes, each after an "Are you sure?".
 - `/vote config` edits the [settings](#settings) in game and saves them for every server that shares the database.
 
 ## Requirements
