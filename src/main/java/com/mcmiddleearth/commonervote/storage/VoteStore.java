@@ -61,13 +61,15 @@ public final class VoteStore {
 
     /**
      * Records {@code voter}'s vote for {@code recipient}, replacing the one they had. A recast never lowers the
-     * weight: the vote keeps the highest weight the voter had for this recipient, an expired vote's included, as
-     * 1.2.9's {@code MAX(weight)} counted every row.
+     * weight: the vote keeps the highest weight of the voter's earlier valid vote for this recipient (1.2.9's rule).
+     * An expired vote is ignored: it is replaced, but it lends its weight to nothing and is not
+     * {@code replacedValidVote}.
      * <p>
      * One transaction, so a failure leaves the voter's previous vote exactly as it was. The three weight settings
-     * are read in it with a row lock, so a vote is never written with a weight scaled by a {@code votesNeeded} that
-     * another backend is just changing, and casts do not overlap. A setting that is missing or unusable counts as
-     * its default, as {@link Settings#fromMap} reads it.
+     * are read in it with a row lock ({@link SettingsStore#lockWeightSettings}, the same first statement a settings
+     * save runs), so a vote is never written with a weight scaled by a {@code votesNeeded} that another backend is
+     * just changing, and casts do not overlap. A setting that is missing or unusable counts as its default, as
+     * {@link Settings#fromMap} reads it.
      *
      * @param reason     free text; {@code null} or blank is stored as {@code ""}, and a long text is cut to what the
      *                   column holds
@@ -77,13 +79,14 @@ public final class VoteStore {
             throws SQLException {
         String storedReason = cleanReason(reason);
         return Transactions.run(factory, c -> {
-            Settings settings = lockSettings(c);
+            Settings settings = SettingsStore.lockWeightSettings(c);
             double wanted = VoteMath.weightFor(staff, settings.staffWeight(), settings.teamWeight(),
                     settings.votesNeeded());
 
-            // What the voter has now. More than one row can exist for a pair, if something else wrote them; all of
-            // them are replaced, and the highest weight survives.
-            double previousMax = 0;
+            // What the voter has now. Only a valid vote counts: an expired row is history, and is replaced without
+            // lending its weight to the new vote. More than one row can exist for a pair, if something else wrote
+            // them; all of them are replaced, and the highest valid weight survives.
+            double highestValid = 0;
             double previousValid = 0;
             boolean replacedValid = false;
             try (PreparedStatement ps = c.prepareStatement(
@@ -94,8 +97,8 @@ public final class VoteStore {
                     while (rs.next()) {
                         double rowWeight = rs.getDouble(1);
                         long rowTimestamp = rs.getLong(2);
-                        previousMax = Math.max(previousMax, rowWeight);
                         if (rowTimestamp >= validSince) { // as VoteMath.isValid
+                            highestValid = Math.max(highestValid, rowWeight);
                             previousValid += rowWeight;
                             replacedValid = true;
                         }
@@ -104,7 +107,7 @@ public final class VoteStore {
             }
 
             double scoreBefore = VoteMath.score(selectValid(c, List.of(recipient), validSince), validSince);
-            double weight = Math.max(previousMax, wanted);
+            double weight = Math.max(highestValid, wanted);
 
             delete(c, "DELETE FROM commonervote_votes WHERE voter = ? AND recipient = ?", voter, recipient);
             try (PreparedStatement ps = c.prepareStatement(
@@ -214,22 +217,6 @@ public final class VoteStore {
                 return rs.next();
             }
         }
-    }
-
-    /**
-     * The three settings that decide a vote's weight, read with a row lock until the transaction ends. Names that
-     * have no row, and values that cannot be used, fall back to the defaults.
-     */
-    private static Settings lockSettings(Connection c) throws SQLException {
-        Map<String, String> stored = new LinkedHashMap<>();
-        try (PreparedStatement ps = c.prepareStatement("SELECT name, value FROM commonervote_settings "
-                + "WHERE name IN ('votesNeeded','staffWeight','teamWeight') FOR UPDATE");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                stored.put(rs.getString(1), rs.getString(2));
-            }
-        }
-        return Settings.fromMap(stored, message -> { });
     }
 
     /** The valid votes of the given recipients, newest first. */

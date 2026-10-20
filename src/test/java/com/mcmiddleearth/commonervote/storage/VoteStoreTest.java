@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -211,6 +212,47 @@ class VoteStoreTest {
     }
 
     @Test
+    void a_team_recast_over_an_expired_staff_vote_does_not_keep_its_weight() throws SQLException {
+        insert(V1, R1, SINCE - DAY, 0.4, "expired staff vote");
+
+        VoteStore.CastResult result = store.cast(V1, R1, false, "team now", NOW, SINCE);
+
+        assertEquals(0.2, weightOf(V1, R1), EPS, "the expired 0.4 lends nothing to the new vote");
+        assertEquals(0.2, result.vote().weight(), EPS);
+        assertFalse(result.replacedValidVote());
+        assertEquals(0.0, result.scoreBefore(), EPS);
+        assertEquals(0.2, result.scoreAfter(), EPS);
+        assertEquals(1, countRows(V1, R1));
+    }
+
+    @Test
+    void a_team_recast_over_a_valid_staff_vote_keeps_its_weight() throws SQLException {
+        insert(V1, R1, NOW - DAY, 0.4, "valid staff vote");
+
+        VoteStore.CastResult result = store.cast(V1, R1, false, "team now", NOW, SINCE);
+
+        assertEquals(0.4, weightOf(V1, R1), EPS);
+        assertEquals(0.4, result.vote().weight(), EPS);
+        assertTrue(result.replacedValidVote());
+        assertEquals(0.4, result.scoreBefore(), EPS);
+        assertEquals(0.4, result.scoreAfter(), EPS);
+    }
+
+    @Test
+    void an_expired_duplicate_does_not_lend_its_weight_to_a_valid_row() throws SQLException {
+        insert(V1, R1, SINCE - DAY, 0.4, "expired");
+        insert(V1, R1, NOW - DAY, 0.2, "valid");
+
+        VoteStore.CastResult result = store.cast(V1, R1, false, "", NOW, SINCE);
+
+        assertEquals(0.2, weightOf(V1, R1), EPS);
+        assertTrue(result.replacedValidVote());
+        assertEquals(0.2, result.scoreBefore(), EPS);
+        assertEquals(0.2, result.scoreAfter(), EPS);
+        assertEquals(1, countRows(V1, R1));
+    }
+
+    @Test
     void a_vote_cast_exactly_at_the_validity_limit_is_valid() throws SQLException {
         insert(V1, R1, SINCE, 0.4, "");
 
@@ -268,6 +310,21 @@ class VoteStoreTest {
         assertThrows(SQLException.class, () -> failing.cast(V1, R1, false, "new", NOW, SINCE));
 
         assertEquals(0, rowCount());
+    }
+
+    @Test
+    void a_vote_and_a_settings_save_start_with_the_same_locking_statement() throws SQLException {
+        // InnoDB takes the rows of a statement in key order. A vote and a settings save that lock different rows,
+        // or the same rows in different statements, can each hold one and wait for the other (a deadlock). H2
+        // cannot show that, so this pins the cause: both must run the very same statement first.
+        List<String> castSql = new ArrayList<>();
+        new VoteStore(recording(castSql)).cast(V1, R1, false, "", NOW, SINCE);
+        List<String> saveSql = new ArrayList<>();
+        new SettingsStore(recording(saveSql)).save(Settings.defaults());
+
+        assertEquals("SELECT name, value FROM commonervote_settings "
+                + "WHERE name IN ('votesNeeded','staffWeight','teamWeight') FOR UPDATE", castSql.get(0));
+        assertEquals(castSql.get(0), saveSql.get(0));
     }
 
     // ---- withdraw and clear ----
@@ -525,6 +582,24 @@ class VoteStoreTest {
             rs.next();
             return rs.getInt(1);
         }
+    }
+
+    /** Connections that behave normally and add the SQL of every prepared statement to {@code log}, in order. */
+    private ConnectionFactory recording(List<String> log) {
+        return () -> {
+            Connection real = db.open();
+            return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
+                    new Class<?>[] {Connection.class}, (proxy, method, args) -> {
+                        if (method.getName().equals("prepareStatement") && args[0] instanceof String sql) {
+                            log.add(sql);
+                        }
+                        try {
+                            return method.invoke(real, args);
+                        } catch (InvocationTargetException e) {
+                            throw e.getCause();
+                        }
+                    });
+        };
     }
 
     /** Connections that throw {@code failure} on the vote INSERT, and behave normally otherwise. */

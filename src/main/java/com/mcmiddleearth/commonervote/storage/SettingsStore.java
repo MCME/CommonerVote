@@ -25,8 +25,6 @@ import com.mcmiddleearth.commonervote.domain.VoteMath;
  */
 public final class SettingsStore {
 
-    private static final String VOTES_NEEDED = "votesNeeded";
-
     private final ConnectionFactory factory;
 
     public SettingsStore(ConnectionFactory factory) {
@@ -82,8 +80,9 @@ public final class SettingsStore {
         }
         Map<String, String> values = s.toMap();
         inTransaction(c -> {
-            // The lock serialises two saves, so neither can rescale from a value the other is changing.
-            int stored = lockStoredVotesNeeded(c);
+            // The lock serialises two saves, so neither can rescale from a value the other is changing, and it
+            // is the same lock a vote takes first (see lockWeightSettings).
+            int stored = lockWeightSettings(c).votesNeeded();
             if (stored != s.votesNeeded()) {
                 rescaleVotes(c, stored, s.votesNeeded());
             }
@@ -117,26 +116,28 @@ public final class SettingsStore {
     }
 
     /**
-     * The stored {@code votesNeeded}, read with a row lock until the transaction ends. A missing or unusable value
-     * is read the way {@link Settings#fromMap} reads it, as the default, because that is the value the votes in
-     * the table were written under.
+     * Reads the three settings that decide a vote's weight ({@code votesNeeded}, {@code staffWeight},
+     * {@code teamWeight}), with a row lock on them until the transaction ends. A missing or unusable value is read
+     * the way {@link Settings#fromMap} reads it, as the default; for {@code votesNeeded} that is the value the votes
+     * in the table were written under.
+     * <p>
+     * <b>This one statement is the first thing both {@link #save} and {@link VoteStore#cast} do, and it must stay
+     * the only way either of them takes its first settings lock.</b> InnoDB takes the rows of a statement in key
+     * order. If the two transactions locked different rows, or the same rows in different statements, each could
+     * hold one row and wait for the other's (a deadlock, and the loser's player is told the database is
+     * unreachable). With the same statement first, the second transaction waits on the first row while holding
+     * nothing, and just queues behind the first.
      */
-    private static int lockStoredVotesNeeded(Connection c) throws SQLException {
-        String stored = null;
-        try (PreparedStatement ps = c.prepareStatement(
-                "SELECT value FROM commonervote_settings WHERE name = ? FOR UPDATE")) {
-            ps.setString(1, VOTES_NEEDED);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    stored = rs.getString(1);
-                }
+    static Settings lockWeightSettings(Connection c) throws SQLException {
+        Map<String, String> stored = new LinkedHashMap<>();
+        try (PreparedStatement ps = c.prepareStatement("SELECT name, value FROM commonervote_settings "
+                + "WHERE name IN ('votesNeeded','staffWeight','teamWeight') FOR UPDATE");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                stored.put(rs.getString(1), rs.getString(2));
             }
         }
-        Map<String, String> row = new LinkedHashMap<>();
-        if (stored != null) {
-            row.put(VOTES_NEEDED, stored);
-        }
-        return Settings.fromMap(row, message -> { }).votesNeeded();
+        return Settings.fromMap(stored, message -> { });
     }
 
     /** Converts every stored weight from {@code from} to {@code to} votes needed, as {@link VoteMath#rescale}. */
