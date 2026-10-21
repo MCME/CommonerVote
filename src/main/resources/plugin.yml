@@ -1,48 +1,52 @@
-name: ${project.artifactId}
-main: com.mcmiddleearth.commonerVote.CommonerVotePlugin
-version: ${project.version}
-author: Eriol_Eandur
-load: STARTUP
-loadbefore: [Votifier]
-depend: [PluginUtils]
-api-version: 1.15
+name: CommonerVote
+version: '${project.version}'
+main: com.mcmiddleearth.commonervote.CommonerVotePlugin
+api-version: '26.2'
+depend: [LuckPerms]
+authors: [Eriol_Eandur, Ivan1pl]
+description: Team votes that promote guests to Commoner
+website: https://github.com/MCME/CommonerVote
 
-commands:
-   vote:
-      description: Manages voting for commoner rank applicants
-      usage: /vote [score | review | withdraw | apply | config | clear]
+# No commands: block. The /vote command is registered with Brigadier.
 permissions:
-    commonervote.*:
-        description: Allows to use all features of commonerVote plugin
-        default: op
-        children:
-            commonervote.clear: true
-            commonervote.review: true
-            commonervote.score.other: true
-            commonervote.staff: true
-            commonervote.apply: true
-            commonervote.config: true
-    commonervote.clear:
-        description: Allows to clear all votes for a player
-    commonervote.review:
-        description: Allows to see a list of all votes for a player
-    commonervote.score.other:
-        description: Allows to see the amount of votes for other players
-        children:
-            commonervote.score: true
-    commonervote.staff:
-        description: Allows to vote with staff vote weight
-        children:
-            commonervote.vote: true
-    commonervote.voter:
-        description: Allows to vote for a player
-    commonervote.score:
-        description: Allows to see the amount of own votes
-    commonervote.apply:
-        description: Allows to apply for recieving commoner votes
-    commonervote.config:
-        description: Allows to modify plugin configuration
-    commonervote.exempt:
-        description: Players with this permission can't get voted
-        
-        
+  commonervote.*:
+    description: Grants every CommonerVote permission except exempt
+    default: op
+    children:
+      commonervote.vote: true
+      commonervote.staff: true
+      commonervote.score: true
+      commonervote.score.other: true
+      commonervote.review: true
+      commonervote.clear: true
+      commonervote.config: true
+      commonervote.promote: true
+  commonervote.vote:
+    description: Vote for a guest to become a Commoner
+    default: op
+  commonervote.staff:
+    description: Vote with the staff vote weight
+    default: op
+    children:
+      commonervote.vote: true
+  commonervote.exempt:
+    description: Marks a player as already past the vote, so nobody can vote for them
+    default: op
+  commonervote.score:
+    description: See your own vote score
+    default: true
+  commonervote.score.other:
+    description: See the vote score of other players
+    default: op
+  commonervote.review:
+    description: See who voted for a player and why
+    default: op
+  commonervote.clear:
+    description: Clear all votes for a player
+    default: op
+  commonervote.config:
+    description: Change the CommonerVote settings in game
+    default: op
+  commonervote.promote:
+    description: Promote a player to Commoner by hand
+    default: op
