@@ -5,7 +5,7 @@ All notable changes to CommonerVote are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - unreleased
+## [2.0.0] - 2026-10-21
 
 A rewrite for Paper 26.2 and Java 25. The votes table is unchanged, so every existing vote carries over.
 
@@ -84,3 +84,5 @@ A rewrite for Paper 26.2 and Java 25. The votes table is unchanged, so every exi
 - The PluginUtils dependency, and the bundled MariaDB driver.
 - The Votifier `loadbefore` entry and `load: STARTUP` in `plugin.yml`.
 - The `commonervote.voter` permission, which nothing checked.
+
+[2.0.0]: https://github.com/MCME/CommonerVote/releases/tag/v2.0.0
