@@ -157,6 +157,33 @@ class PromotionServiceTest extends ServiceTestBase {
     }
 
     @Test
+    void a_click_in_a_stored_text_stays_text_in_the_welcome_and_the_announcement() throws SQLException {
+        setting("welcomeText", "<click:run_command:/help>Welcome</click>");
+        setting("announceText", "<hover:show_text:x>Hail</hover>");
+        PlayerMock bilbo = guest("Bilbo_B");
+
+        promotion.checkAutoPromotion(bilbo, 1.0);
+
+        assertEquals("<click:run_command:/help>Welcome</click>",
+                Texts.plain(presenter.last(bilbo, WelcomeView.class).welcomeText()));
+        assertEquals("<hover:show_text:x>Hail</hover>", Texts.plain(messenger.announcements().get(0)));
+    }
+
+    @Test
+    void a_stored_text_that_cannot_be_parsed_does_not_stop_a_promotion_halfway() throws SQLException {
+        setting("welcomeText", "§cWelcome");
+        setting("announceText", "§cHail");
+        PlayerMock bilbo = guest("Bilbo_B");
+        bilbo.setLevel(3);
+
+        promotion.checkAutoPromotion(bilbo, 1.0);
+
+        assertEquals("§cWelcome", Texts.plain(presenter.last(bilbo, WelcomeView.class).welcomeText()));
+        assertEquals("§cHail", Texts.plain(messenger.announcements().get(0)));
+        assertEquals(0, bilbo.getLevel(), "the XP bar is released");
+    }
+
+    @Test
     void xp_bar_off_keeps_the_xp() throws SQLException {
         setting("xpBar", "false");
         PlayerMock bilbo = guest("Bilbo_B");

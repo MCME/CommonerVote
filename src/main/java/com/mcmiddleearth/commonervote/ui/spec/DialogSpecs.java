@@ -212,7 +212,8 @@ public final class DialogSpecs {
                 v.text("welcome_text"), v.text("announce_text"))));
         return new DialogSpec(text("Texts and links"), List.of(
                 text("The promotion command and the Commoner group are set in each server's config.yml."),
-                text("The three texts are MiniMessage and may use <player>, <votes_needed> and <validity_days>.")),
+                text("The three texts are MiniMessage, for colours and formatting only, and may use <player>, "
+                        + "<votes_needed> and <validity_days>.")),
                 inputs, List.of(button("Save for all servers", save)), closing("Back"), 1, EDITING_CLICK_LIFETIME);
     }
 
