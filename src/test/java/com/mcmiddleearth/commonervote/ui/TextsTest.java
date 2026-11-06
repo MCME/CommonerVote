@@ -2,6 +2,8 @@ package com.mcmiddleearth.commonervote.ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
@@ -10,8 +12,10 @@ import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.domain.SettingsForm;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 
 import static com.mcmiddleearth.commonervote.ui.Texts.bar;
 import static com.mcmiddleearth.commonervote.ui.Texts.fit;
@@ -19,6 +23,8 @@ import static com.mcmiddleearth.commonervote.ui.Texts.mini;
 import static com.mcmiddleearth.commonervote.ui.Texts.plain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TextsTest {
@@ -115,6 +121,93 @@ class TextsTest {
         Component c = mini("<red>hi</red> there");
         assertEquals("hi there", plain(c));
         assertTrue(allColors(c).contains(NamedTextColor.RED));
+    }
+
+    /** The component and everything below it. */
+    private static List<Component> parts(Component c) {
+        List<Component> parts = new ArrayList<>();
+        parts.add(c);
+        for (Component child : c.children()) {
+            parts.addAll(parts(child));
+        }
+        return parts;
+    }
+
+    @Test
+    void mini_gives_no_click_hover_or_insertion() {
+        for (String text : List.of(
+                "<click:run_command:/help>hi</click>",
+                "<click:suggest_command:/help>hi</click>",
+                "<click:open_url:https://example.org>hi</click>",
+                "<click:copy_to_clipboard:x>hi</click>",
+                "<hover:show_text:x>hi</hover>",
+                "<insert:/help>hi</insert>",
+                "<red><bold><click:run_command:/help>hi</click></bold></red>")) {
+            Component c = mini(text);
+            for (Component part : parts(c)) {
+                assertNull(part.clickEvent(), text);
+                assertNull(part.hoverEvent(), text);
+                assertNull(part.insertion(), text);
+            }
+            assertTrue(plain(c).contains("hi"), text);
+        }
+    }
+
+    @Test
+    void mini_shows_a_tag_it_does_not_allow_as_text() {
+        assertEquals("<click:run_command:/help>hi</click>", plain(mini("<click:run_command:/help>hi</click>")));
+    }
+
+    @Test
+    void mini_shows_a_text_it_cannot_parse_as_typed() {
+        // MiniMessage refuses the old section sign codes outright, anywhere in the text.
+        assertEquals("§chi", plain(mini("§chi")));
+        assertEquals("hi §cthere <red>you", plain(mini("hi §cthere <red>you")));
+    }
+
+    @Test
+    void mini_looks_nothing_up() {
+        for (String text : List.of("<selector:@a>", "<score:Bilbo:deaths>", "<nbt:block:0 0 0:Items>",
+                "<key:key.jump>", "<lang:block.minecraft.stone>", "<sprite:block/stone>", "<head:Bilbo>")) {
+            for (Component part : parts(mini(text))) {
+                assertInstanceOf(TextComponent.class, part, text);
+            }
+            assertEquals(text, plain(mini(text)));
+        }
+    }
+
+    @Test
+    void mini_keeps_colours() {
+        assertTrue(allColors(mini("<yellow>a")).contains(NamedTextColor.YELLOW));
+        assertTrue(allColors(mini("<color:aqua>a")).contains(NamedTextColor.AQUA));
+        assertTrue(allColors(mini("<#ff0000>a")).contains(TextColor.color(0xff0000)));
+        assertEquals(3, Set.copyOf(allColors(mini("<gradient:red:blue>abc"))).size());
+        assertEquals(3, Set.copyOf(allColors(mini("<rainbow>abc"))).size());
+    }
+
+    @Test
+    void mini_keeps_formatting() {
+        for (Map.Entry<String, TextDecoration> tag : Map.of("bold", TextDecoration.BOLD,
+                "italic", TextDecoration.ITALIC, "underlined", TextDecoration.UNDERLINED,
+                "strikethrough", TextDecoration.STRIKETHROUGH, "obfuscated", TextDecoration.OBFUSCATED).entrySet()) {
+            Component c = mini("<" + tag.getKey() + ">a");
+            assertTrue(parts(c).stream().anyMatch(p -> p.decoration(tag.getValue()) == TextDecoration.State.TRUE),
+                    tag.getKey());
+            assertEquals("a", plain(c), tag.getKey());
+        }
+        assertEquals("a\nb", plain(mini("a<newline>b")));
+        Component reset = mini("<red>a<reset>b");
+        assertEquals("ab", plain(reset));
+        assertEquals(List.of(NamedTextColor.RED), allColors(reset), "reset ends the colour");
+    }
+
+    @Test
+    void the_default_texts_lose_no_tag() {
+        Settings d = Settings.defaults();
+        for (String text : List.of(d.guestInfoText(), d.welcomeText(), d.announceText())) {
+            String shown = plain(mini(text, Texts.placeholders(d, "Bilbo_B")));
+            assertFalse(shown.contains("<"), shown);
+        }
     }
 
     @Test

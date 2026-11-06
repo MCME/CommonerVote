@@ -10,6 +10,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -17,6 +18,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.player.PlayerExpChangeEvent;
 import org.bukkit.plugin.InvalidDescriptionException;
 import org.bukkit.plugin.PluginDescriptionFile;
@@ -74,7 +76,7 @@ class PluginLifecycleTest {
         assertTrue(plugin.isEnabled());
         assertEquals(Set.of("commonervote_votes", "commonervote_settings", "commonervote_promotions"),
                 tables(plugin.database()));
-        assertEquals(15, rows(plugin.database(), "commonervote_settings"));
+        assertEquals(13, rows(plugin.database(), "commonervote_settings"));
         assertEquals(List.of(), messages(plugin, Level.WARNING), "a clean start warns about nothing");
         assertEquals(List.of(), messages(plugin, Level.SEVERE));
         assertTrue(messages(plugin, Level.INFO).stream().noneMatch(m -> m.contains("/vote config")),
@@ -112,6 +114,176 @@ class PluginLifecycleTest {
                 .toList();
         assertEquals(1, warnings.size(), "one WARNING for useDatabase: false: " + messages(plugin, Level.WARNING));
     }
+
+    // ---- the promotion command and group ----
+
+    @Test
+    void the_promotion_command_and_group_come_from_config_yml() throws IOException {
+        // As a 1.2.9 config.yml has them, with the space after the command.
+        writeConfig("""
+                promotionCommand: 'lp user <player> parent add <group> '
+                commonerGroupName: citizen
+                """);
+
+        TestCommonerVotePlugin plugin = load();
+        UUID bilbo = promoteAGuest(plugin);
+
+        assertEquals(List.of("lp user " + bilbo + " parent add citizen"), plugin.commands().commands());
+    }
+
+    @Test
+    void a_config_yml_without_the_keys_gets_the_default_command() throws IOException {
+        writeConfig("useBungee: true\n");
+
+        TestCommonerVotePlugin plugin = load();
+        UUID bilbo = promoteAGuest(plugin);
+
+        assertTrue(plugin.isEnabled());
+        assertEquals(List.of("lp user " + bilbo + " parent set commoner"), plugin.commands().commands());
+    }
+
+    @Test
+    void a_new_config_yml_states_the_command_and_group() throws IOException {
+        TestCommonerVotePlugin plugin = load();
+
+        YamlConfiguration written = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "config.yml"));
+        assertEquals("lp user <player> parent set <group>", written.getString("promotionCommand"));
+        assertEquals("commoner", written.getString("commonerGroupName"));
+    }
+
+    @Test
+    void a_group_that_is_no_plain_name_disables_the_plugin() throws IOException, SQLException {
+        writeConfig("commonerGroupName: 'two words'\n");
+
+        assertDisabledOver("commonerGroupName");
+    }
+
+    @Test
+    void a_command_without_the_player_disables_the_plugin() throws IOException, SQLException {
+        writeConfig("promotionCommand: 'lp user someone parent set commoner'\n");
+
+        assertDisabledOver("promotionCommand");
+    }
+
+    @Test
+    void a_command_that_is_a_list_disables_the_plugin() throws IOException, SQLException {
+        writeConfig("promotionCommand: ['lp user <player> parent set <group>']\n");
+
+        assertDisabledOver("promotionCommand");
+    }
+
+    @Test
+    void a_command_of_two_lines_disables_the_plugin() throws IOException, SQLException {
+        writeConfig("""
+                promotionCommand: |
+                  lp user <player> parent set <group>
+                  and another line
+                """);
+
+        assertDisabledOver("promotionCommand");
+    }
+
+    @Test
+    void a_group_that_yaml_reads_as_a_boolean_disables_the_plugin() throws IOException, SQLException {
+        writeConfig("commonerGroupName: no\n");
+
+        assertDisabledOver("commonerGroupName");
+    }
+
+    @Test
+    void a_group_that_yaml_reads_as_a_number_disables_the_plugin() throws IOException, SQLException {
+        writeConfig("commonerGroupName: 7\n");
+
+        assertDisabledOver("commonerGroupName");
+    }
+
+    @Test
+    void a_group_in_quotes_may_be_a_number() throws IOException {
+        writeConfig("commonerGroupName: '7'\n");
+
+        TestCommonerVotePlugin plugin = load();
+        UUID bilbo = promoteAGuest(plugin);
+
+        assertEquals(List.of("lp user " + bilbo + " parent set 7"), plugin.commands().commands());
+    }
+
+    @Test
+    void a_key_with_no_value_gets_the_default() throws IOException {
+        writeConfig("""
+                promotionCommand:
+                commonerGroupName: ~
+                """);
+
+        TestCommonerVotePlugin plugin = load();
+        UUID bilbo = promoteAGuest(plugin);
+
+        assertEquals(List.of("lp user " + bilbo + " parent set commoner"), plugin.commands().commands());
+    }
+
+    @Test
+    void the_startup_log_states_the_command_and_group_in_use() throws IOException {
+        writeConfig("""
+                promotionCommand: 'lp user <player> parent add <group> '
+                commonerGroupName: citizen
+                """);
+
+        TestCommonerVotePlugin plugin = load();
+
+        List<String> lines = messages(plugin, Level.INFO).stream()
+                .filter(m -> m.contains("lp user <player> parent add <group>")).toList();
+        assertEquals(1, lines.size(), messages(plugin, Level.INFO).toString());
+        assertTrue(lines.getFirst().contains("citizen"), lines.getFirst());
+    }
+
+    private void assertDisabledOver(String key) throws SQLException {
+        TestCommonerVotePlugin plugin = load();
+
+        assertFalse(plugin.isEnabled());
+        assertTrue(messages(plugin, Level.SEVERE).stream().anyMatch(m -> m.contains(key)),
+                "SEVERE lines: " + messages(plugin, Level.SEVERE));
+        assertNull(plugin.promotionService(), "nothing is built on values that cannot be used");
+        assertEquals(Set.of(), tables(plugin.database()));
+        assertDoesNotThrow(MockBukkit::unmock);
+    }
+
+    @Test
+    void the_promotion_keys_are_not_called_ignored() throws IOException {
+        writeConfig("""
+                validityPeriod: 200
+                promotionCommand: 'lp user <player> parent set <group> '
+                commonerGroupName: commoner
+                """);
+
+        TestCommonerVotePlugin plugin = load();
+
+        List<String> lines = messages(plugin, Level.INFO).stream().filter(m -> m.contains("/vote config")).toList();
+        assertEquals(1, lines.size(), lines.toString());
+        assertTrue(lines.getFirst().contains("validityPeriod"), lines.getFirst());
+        assertFalse(lines.getFirst().contains("promotionCommand"), lines.getFirst());
+        assertFalse(lines.getFirst().contains("commonerGroupName"), lines.getFirst());
+    }
+
+    @Test
+    void stored_rows_of_the_command_and_group_are_removed_at_startup_and_others_kept() throws SQLException {
+        ConnectionFactory raw = TestDatabase.fresh();
+        Schema.create(raw);
+        TestDatabase.exec(raw,
+                "INSERT INTO commonervote_settings (name, value) VALUES ('promotionCommand', 'something else <player>')");
+        TestDatabase.exec(raw, "INSERT INTO commonervote_settings (name, value) VALUES ('commonerGroup', 'other')");
+        TestDatabase.exec(raw, "INSERT INTO commonervote_settings (name, value) VALUES ('validityDays', '33')");
+
+        TestCommonerVotePlugin plugin = load(raw);
+        UUID bilbo = promoteAGuest(plugin);
+
+        Map<String, String> stored = new SettingsStore(raw).load();
+        assertFalse(stored.containsKey("promotionCommand"), stored.toString());
+        assertFalse(stored.containsKey("commonerGroup"), stored.toString());
+        assertEquals("33", stored.get("validityDays"), "an edited setting survives the tidy-up");
+        assertEquals(13, stored.size());
+        assertEquals(List.of("lp user " + bilbo + " parent set commoner"), plugin.commands().commands());
+    }
+
+    // ---- the running plugin ----
 
     @Test
     void join_flows_through() throws SQLException {
@@ -168,7 +340,7 @@ class PluginLifecycleTest {
         server.getScheduler().performTicks(1200);
         assertEquals(Set.of("commonervote_votes", "commonervote_settings", "commonervote_promotions"), tables(raw),
                 "the next minute's retry created the tables");
-        assertEquals(15, rows(raw, "commonervote_settings"), "and seeded the settings");
+        assertEquals(13, rows(raw, "commonervote_settings"), "and seeded the settings");
 
         TestDatabase.exec(raw, "DROP TABLE commonervote_promotions");
         server.getScheduler().performTicks(1200);
@@ -254,6 +426,13 @@ class PluginLifecycleTest {
 
     private static List<String> messages(TestCommonerVotePlugin plugin, Level level) {
         return plugin.log().records(level).stream().map(LogRecord::getMessage).toList();
+    }
+
+    /** A guest with the votes for a promotion joins, and the plugin promotes them. */
+    private UUID promoteAGuest(TestCommonerVotePlugin plugin) {
+        PlayerMock guest = server.addPlayer("Bilbo_B");
+        plugin.promotionService().checkAutoPromotion(guest, 1.0);
+        return guest.getUniqueId();
     }
 
     /** The amount left of an XP pickup of {@code amount} once the plugin's listener has seen it. */

@@ -174,6 +174,17 @@ class VoteServiceTest extends ServiceTestBase {
     }
 
     @Test
+    void a_click_in_the_stored_guest_text_stays_text() throws SQLException {
+        setting("guestInfoText", "<click:run_command:/help>Info</click>");
+        PlayerMock bilbo = guest("Bilbo_B");
+
+        voting.showOwnProgress(bilbo);
+
+        assertEquals("<click:run_command:/help>Info</click>",
+                Texts.plain(presenter.last(bilbo, GuestInfoView.class).infoText()));
+    }
+
+    @Test
     void the_guest_dialog_counts_valid_votes_only() throws SQLException {
         PlayerMock bilbo = guest("Bilbo_B");
         vote(OTHER_VOTER, bilbo.getUniqueId(), 0.4, 30);

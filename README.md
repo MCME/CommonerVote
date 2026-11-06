@@ -104,9 +104,10 @@ Dialog buttons check the permission again when they are clicked, so taking a per
 
 The settings are changed in game with `/vote config`. They are stored in the database and shared by every server on that
 database: every other server picks up a change within about a minute, and the server that saves uses it at once. The
-first page holds the numbers and switches, and "Texts and links…" opens the second page. A value that is out of range,
-an empty group or command, or a promotion command without `<player>` is refused with a chat line, and nothing is
-saved.
+first page holds the numbers and switches, and "Texts and links…" opens the second page. A value that is out of range
+is refused with a chat line, and nothing is saved. Every save is logged: who made it and, for each setting it changed,
+the old and the new value. The promotion command and the group it gives are not among these: they are set per server in
+[config.yml](#configyml).
 
 | Setting | Default | Notes |
 |---|---|---|
@@ -117,18 +118,18 @@ saved.
 | `autoPromote` | `true` | Promote a guest as soon as they reach 100 %. When off, only an admin promotes |
 | `xpBar` | `true` | Show a guest's progress on the XP bar. When off, nobody's XP is touched |
 | `broadcastNetwork` | `true` | Announce a promotion to every player on the network. When off, or without a proxy channel, only this server hears it |
-| `commonerGroup` | `commoner` | The LuckPerms group a promotion gives; it fills `<group>` in the promotion command |
 | `promotableGroups` | empty | Comma-separated LuckPerms groups that do not block an automatic promotion (see below) |
-| `promotionCommand` | `lp user <player> parent set <group>` | Run from the console on a promotion. `<player>` is replaced by the player's UUID, which LuckPerms accepts in place of a name. Must contain `<player>` |
 | `rulesUrl` | `https://www.mcmiddleearth.com/help/terms` | The "Read the rules" button in the welcome dialog |
 | `guideUrl` | empty | The "Building guide" button in the guest dialog; the button is hidden when this is empty |
 | `guestInfoText` | see below | The explanation a guest sees on `/vote` |
 | `welcomeText` | see below | The body of the welcome dialog |
 | `announceText` | see below | The network announcement |
 
-The three texts are [MiniMessage](https://docs.advntr.dev/minimessage/format.html) and may use `<player>`,
-`<votes_needed>` and `<validity_days>`. The other text boxes hold at most 256 characters, and these three at most
-1,024. The defaults:
+The three texts are [MiniMessage](https://docs.advntr.dev/minimessage/format.html), for colours and formatting only:
+colours, gradients, `<rainbow>`, decorations such as `<bold>`, `<newline>` and `<reset>`. They may use `<player>`,
+`<votes_needed>` and `<validity_days>`. Any other tag, such as a click or a hover, stays in the text as you typed it, and
+so does a whole text that MiniMessage cannot parse, such as one with an old `§` colour code. The other text boxes hold at
+most 256 characters, and these three at most 1,024. The defaults:
 
 ```text
 guestInfoText: Team members vote for guests whose building they've seen. <yellow><votes_needed> votes</yellow> make you a Commoner. Votes last <validity_days> days.
@@ -138,9 +139,10 @@ announceText:  <gold>★ <player> <yellow>has been promoted to <aqua>Commoner<ye
 
 ### Automatic promotion
 
-`lp user <player> parent set <group>` replaces all of a player's groups, so promoting someone who holds a badge or a role
-would take it away. The plugin therefore promotes a player (automatically, and with "Promote now") only when their
-direct LuckPerms groups are `default` plus the groups in `promotableGroups`. For anyone else the promotion is refused.
+The default promotion command, `lp user <player> parent set <group>`, replaces all of a player's groups, so promoting
+someone who holds a badge or a role would take it away. The plugin therefore promotes a player (automatically, and with
+"Promote now") only when their direct LuckPerms groups are `default` plus the groups in `promotableGroups`. For anyone
+else the promotion is refused.
 The review list marks such a player ("Auto-promotion blocked: has group …"), the log gets one INFO line per player per
 session, and "Promote now" tells the admin which group blocks it. The admin can then use LuckPerms by hand, or add a
 harmless group to `promotableGroups`.
@@ -164,9 +166,12 @@ plain broadcast.
 
 ## config.yml
 
-Only the database connection and `useBungee` live in `config.yml`; everything else is a [setting](#settings).
+The promotion, the database connection and `useBungee` live in `config.yml`, one file per server; everything else is a
+[setting](#settings).
 
 ```yaml
+promotionCommand: 'lp user <player> parent set <group>'
+commonerGroupName: commoner
 database:
   dbName: commonervote
   user: commonervote
@@ -179,6 +184,15 @@ useBungee: true
 A fresh install writes this file with placeholder values (`development` as the database name, user and password) that
 you must replace. The plugin connects without SSL, so keep the database on `localhost` or a private network. The
 account needs `SELECT`, `INSERT`, `UPDATE`, `DELETE` and `CREATE` on the database.
+
+`promotionCommand` is run from the console on a promotion. It is one line that must contain `<player>`, which is replaced
+by the player's UUID (LuckPerms accepts a UUID in place of a name), and may contain `<group>`. `commonerGroupName` is the
+LuckPerms group that fills `<group>`: one name of letters, digits, `_` and `-`.
+
+A key that is missing, or has no value at all, gets the default shown above. A value that cannot be used logs a SEVERE
+line and disables the plugin on that server; correct it and restart. That includes a value that is not text, such as a
+list, or an unquoted number or `no`, which YAML does not read as text, so put those in quotes. The startup log states the
+command and the group in use. Keep the two the same on every server, unless a server really should promote differently.
 
 ## Database
 
@@ -207,7 +221,7 @@ mvn -B verify
 
 This compiles the plugin, runs the tests (JUnit, Mockito and MockBukkit, with H2 in MariaDB mode for the SQL) and writes
 the jar to `target/`. Nothing is shaded. The jar follows MCME's naming convention,
-`CommonerVote-<version>-<DEV|SNAPSHOT|RELEASE>-<commit id>.jar`, for example `CommonerVote-2.0.0-DEV-1a2b3c4.jar`. The
+`CommonerVote-<version>-<DEV|SNAPSHOT|RELEASE>-<commit id>.jar`, for example `CommonerVote-2.0.1-DEV-1a2b3c4.jar`. The
 kind defaults to `DEV`; pass `-Dbuild.type=RELEASE` for a release build. The commit id is that of the current HEAD, so
 build after committing. In a linked git worktree, pass it yourself with
 `-Dgit.commit.id.abbrev=$(git rev-parse --short=7 HEAD)`.
@@ -215,15 +229,32 @@ build after committing. In a linked git worktree, pass it yourself with
 GitHub Actions runs the same `mvn -B verify` on every push to `master`, `development` and `revision/**`, and on pull
 requests.
 
+## Upgrading from 2.0.0
+
+Before you swap the first jar:
+
+- **Read the `promotionCommand` and `commonerGroup` rows of `commonervote_settings`.** 2.0.1 reads both values from
+  `config.yml` instead, and its first start deletes the rows. If you changed either with `/vote config`, put your values
+  in every server's `config.yml`.
+- **Check both keys in every `config.yml`.** A file without them gets the defaults. A file from 1.x still has them: 2.0.0
+  ignored them, and they count again now, so make sure they say what you want.
+- **Check the three texts.** They now allow colours and formatting only. A click, hover or other tag in a stored text
+  shows as typed on every server from the first 2.0.1 start, so take it out with `/vote config`.
+
+While both versions run side by side, and after a return to 2.0.0, a 2.0.0 server uses its own defaults for the command
+and the group, as the rows are gone and it does not read them from `config.yml`. It stores those defaults again when it
+starts or saves. 2.0.1 does not read them, and deletes them at its next start.
+
 ## Upgrading from 1.x
 
 - Replace the jar and restart. The votes table and its rows are used as they are.
-- Only `database` and `useBungee` are still read from `config.yml`. The other 1.x keys are ignored, and the startup log
-  names the ones your file still has. The settings now live in the database: set them with `/vote config`. A server
-  that finds no stored settings stores the defaults above, but only for the rows that are missing.
+- Only `database`, `useBungee`, `promotionCommand` and `commonerGroupName` are still read from `config.yml`. The other
+  1.x keys are ignored, and the startup log names the ones your file still has. The settings now live in the database:
+  set them with `/vote config`. A server that finds no stored settings stores the defaults above, but only for the rows
+  that are missing.
 - **If your 1.x `votesNeeded` was not 5, set it before the first 2.0 start.** Existing weights were stored as
-  `weight / votesNeeded`, and 2.0 ignores the 1.x `config.yml`, so it would start with 5 and change what every stored
-  vote is worth. Insert your old value first (the example uses 7):
+  `weight / votesNeeded`, and 2.0 ignores that key in the 1.x `config.yml`, so it would start with 5 and change what every
+  stored vote is worth. Insert your old value first (the example uses 7):
 
   ```sql
   CREATE TABLE IF NOT EXISTS commonervote_settings (name VARCHAR(64) PRIMARY KEY, value TEXT NOT NULL);

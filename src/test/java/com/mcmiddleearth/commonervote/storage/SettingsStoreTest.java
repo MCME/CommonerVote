@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test;
 
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.domain.SettingsForm;
-import com.mcmiddleearth.commonervote.domain.TextsForm;
 import com.mcmiddleearth.commonervote.support.TestDatabase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -141,7 +140,7 @@ class SettingsStoreTest {
         Map<String, String> loaded = store.load();
         assertEquals("7", loaded.get("votesNeeded"));
         assertEquals(Settings.defaults().toMap().keySet(), loaded.keySet());
-        assertEquals(15, loaded.size());
+        assertEquals(13, loaded.size());
         assertEquals("100", loaded.get("validityDays"));
     }
 
@@ -152,7 +151,7 @@ class SettingsStoreTest {
         store.seedMissing(Settings.defaults().toMap());
 
         assertEquals("50", store.load().get("validityDays"));
-        assertEquals(15, store.load().size());
+        assertEquals(13, store.load().size());
     }
 
     @Test
@@ -181,7 +180,7 @@ class SettingsStoreTest {
 
         assertTrue(raced.get(), "the competing insert should have happened");
         Map<String, String> loaded = store.load();
-        assertEquals(15, loaded.size());
+        assertEquals(13, loaded.size());
         assertEquals("9", loaded.get("votesNeeded"));
     }
 
@@ -193,17 +192,32 @@ class SettingsStoreTest {
 
         Map<String, String> loaded = store.load();
         assertEquals("50", loaded.get("validityDays"));
-        assertEquals(15, loaded.size());
+        assertEquals(13, loaded.size());
         // Saved over seeded rows too: update, not a second insert.
         store.save(Settings.defaults().withNumbers(form(5, 60)));
         assertEquals("60", store.load().get("validityDays"));
-        assertEquals(15, store.load().size());
+        assertEquals(13, store.load().size());
+    }
+
+    @Test
+    void save_gives_what_the_table_held_before() throws SQLException {
+        assertEquals(Map.of(), store.save(Settings.defaults().withNumbers(form(5, 50))));
+
+        TestDatabase.exec(db, "UPDATE commonervote_settings SET value = '33' WHERE name = 'validityDays'");
+        TestDatabase.exec(db, "INSERT INTO commonervote_settings (name, value) VALUES ('leftover', 'x')");
+
+        Map<String, String> before = store.save(Settings.defaults().withNumbers(form(5, 60)));
+
+        assertEquals("33", before.get("validityDays"));
+        assertEquals("5", before.get("votesNeeded"));
+        assertEquals("x", before.get("leftover"));
+        assertEquals(14, before.size());
     }
 
     @Test
     void every_setting_survives_a_round_trip_including_odd_text() throws SQLException {
-        Settings custom = new Settings(7, 50, 3, 2, false, false, false, "citizen", Set.of("badge_a", "badge_b"),
-                "promote <player> now", "https://example.org/rules", "https://example.org/guide",
+        Settings custom = new Settings(7, 50, 3, 2, false, false, false, Set.of("badge_a", "badge_b"),
+                "https://example.org/rules", "https://example.org/guide",
                 "guest \"quoted\" it's <yellow>x</yellow>", "line one<newline>line two\nreal newline",
                 "<gold>★ <player> has joined!");
 
@@ -239,7 +253,7 @@ class SettingsStoreTest {
         store.save(Settings.defaults().withNumbers(form(10, 100)));
 
         assertWeight("a", 0.1);
-        assertEquals(15, store.load().size());
+        assertEquals(13, store.load().size());
     }
 
     @Test
@@ -275,8 +289,6 @@ class SettingsStoreTest {
             assertTrue(e.getMessage().contains("votesNeeded"), e.getMessage());
         }
         // Any other fault the settings carry is refused the same way.
-        Settings noCommand = Settings.defaults().withTexts(new TextsForm("commoner", "", "", "", "", "", "", ""));
-        assertThrows(IllegalArgumentException.class, () -> counting.save(noCommand));
         assertThrows(IllegalArgumentException.class, () -> counting.save(
                 Settings.defaults().withNumbers(form(5, 400))));
 
@@ -293,11 +305,11 @@ class SettingsStoreTest {
         Map<String, String> before = store.load();
 
         // announceText is the last row written; a null there breaks the NOT NULL column after the weights were
-        // rescaled and fourteen settings were already updated.
+        // rescaled and twelve settings were already updated.
         Settings d = Settings.defaults();
         Settings broken = new Settings(10, 50, d.staffWeight(), d.teamWeight(), d.autoPromote(), d.xpBar(),
-                d.broadcastNetwork(), d.commonerGroup(), d.promotableGroups(), d.promotionCommand(), d.rulesUrl(),
-                d.guideUrl(), d.guestInfoText(), d.welcomeText(), null);
+                d.broadcastNetwork(), d.promotableGroups(), d.rulesUrl(), d.guideUrl(), d.guestInfoText(),
+                d.welcomeText(), null);
 
         assertThrows(SQLException.class, () -> store.save(broken));
 

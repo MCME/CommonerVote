@@ -19,9 +19,9 @@ class SettingsTest {
 
     /** Everything different from the defaults, so a field that was not replaced shows up. */
     private static Settings custom() {
-        return Settings.defaults().withTexts(new TextsForm("citizen", "badge_a,badge_b", "promote <player> now",
-                "https://example.org/rules", "https://example.org/guide", "guest text", "welcome text",
-                "announce text")).withNumbers(new SettingsForm(7, 50, 3, 2, false, false, false));
+        return Settings.defaults().withTexts(new TextsForm("badge_a,badge_b", "https://example.org/rules",
+                "https://example.org/guide", "guest text", "welcome text", "announce text"))
+                .withNumbers(new SettingsForm(7, 50, 3, 2, false, false, false));
     }
 
     private static Map<String, String> only(String name, String value) {
@@ -40,9 +40,7 @@ class SettingsTest {
         assertTrue(s.autoPromote());
         assertTrue(s.xpBar());
         assertTrue(s.broadcastNetwork());
-        assertEquals("commoner", s.commonerGroup());
         assertTrue(s.promotableGroups().isEmpty());
-        assertEquals("lp user <player> parent set <group>", s.promotionCommand());
         assertEquals("https://www.mcmiddleearth.com/help/terms", s.rulesUrl());
         assertEquals("", s.guideUrl());
     }
@@ -85,9 +83,9 @@ class SettingsTest {
         assertEquals(Settings.defaults(), Settings.fromMap(Settings.defaults().toMap(), w -> fail(w)));
         assertEquals(custom(), Settings.fromMap(custom().toMap(), w -> fail(w)));
         assertEquals(Set.of("votesNeeded", "validityDays", "staffWeight", "teamWeight", "autoPromote", "xpBar",
-                "broadcastNetwork", "commonerGroup", "promotableGroups", "promotionCommand", "rulesUrl", "guideUrl",
-                "guestInfoText", "welcomeText", "announceText"), Settings.defaults().toMap().keySet());
-        assertEquals(15, Settings.defaults().toMap().size());
+                "broadcastNetwork", "promotableGroups", "rulesUrl", "guideUrl", "guestInfoText", "welcomeText",
+                "announceText"), Settings.defaults().toMap().keySet());
+        assertEquals(13, Settings.defaults().toMap().size());
     }
 
     @Test
@@ -96,7 +94,6 @@ class SettingsTest {
         assertEquals("7", m.get("votesNeeded"));
         assertEquals("50", m.get("validityDays"));
         assertEquals("false", m.get("autoPromote"));
-        assertEquals("citizen", m.get("commonerGroup"));
         assertEquals("", Settings.defaults().toMap().get("guideUrl"));
         assertEquals("", Settings.defaults().toMap().get("promotableGroups"));
     }
@@ -117,8 +114,7 @@ class SettingsTest {
     @Test
     void promotable_groups_are_immutable_and_copied() {
         Set<String> source = new TreeSet<>(Set.of("a"));
-        Settings s = new Settings(5, 100, 2, 1, true, true, true, "commoner", source, "x <player>", "", "", "", "",
-                "");
+        Settings s = new Settings(5, 100, 2, 1, true, true, true, source, "", "", "", "", "");
         source.add("b");
         assertEquals(Set.of("a"), s.promotableGroups());
         assertThrows(UnsupportedOperationException.class, () -> s.promotableGroups().add("c"));
@@ -193,21 +189,25 @@ class SettingsTest {
     }
 
     @Test
+    void rows_of_the_promotion_command_and_group_are_not_read() {
+        Settings s = Settings.fromMap(Map.of("promotionCommand", "something else <player>", "commonerGroup", "other"),
+                w -> fail(w));
+        assertEquals(Settings.defaults(), s);
+        assertEquals(Settings.defaults().toMap(), s.toMap());
+    }
+
+    @Test
     void strings_are_taken_as_stored() {
-        Settings s = Settings.fromMap(Map.of("rulesUrl", "", "commonerGroup", " Member ",
+        Settings s = Settings.fromMap(Map.of("rulesUrl", "", "guideUrl", " padded ",
                 "guestInfoText", "plain"), w -> fail(w));
         assertEquals("", s.rulesUrl());
-        assertEquals(" Member ", s.commonerGroup());
+        assertEquals(" padded ", s.guideUrl());
         assertEquals("plain", s.guestInfoText());
     }
 
     @Test
     void problems() {
         assertTrue(Settings.defaults().problems().isEmpty());
-        assertFalse(texts(Settings.defaults(), "commoner", "", "").problems().isEmpty());
-        assertFalse(texts(Settings.defaults(), "commoner", "", "lp user someone parent set x").problems().isEmpty());
-        assertFalse(texts(Settings.defaults(), "  ", "", "lp user <player> parent set x").problems().isEmpty());
-        assertFalse(texts(Settings.defaults(), "", "", "lp user <player> parent set x").problems().isEmpty());
         assertFalse(Settings.defaults().withNumbers(new SettingsForm(21, 100, 2, 1, true, true, true))
                 .problems().isEmpty());
         assertFalse(Settings.defaults().withNumbers(new SettingsForm(5, 0, 2, 1, true, true, true))
@@ -220,17 +220,8 @@ class SettingsTest {
 
     @Test
     void problems_name_the_setting() {
-        List<String> problems = texts(Settings.defaults(), "", "", "").problems();
-        assertTrue(problems.stream().anyMatch(p -> p.contains("commonerGroup")), problems.toString());
-        assertTrue(problems.stream().anyMatch(p -> p.contains("promotionCommand")), problems.toString());
         assertTrue(Settings.defaults().withNumbers(new SettingsForm(21, 100, 2, 1, true, true, true))
                 .problems().get(0).contains("votesNeeded"));
-    }
-
-    /** Defaults with only the three promotion strings replaced. */
-    private static Settings texts(Settings base, String group, String groups, String command) {
-        return base.withTexts(new TextsForm(group, groups, command, base.rulesUrl(), base.guideUrl(),
-                base.guestInfoText(), base.welcomeText(), base.announceText()));
     }
 
     @Test
@@ -244,9 +235,7 @@ class SettingsTest {
         assertTrue(after.autoPromote());
         assertTrue(after.xpBar());
         assertTrue(after.broadcastNetwork());
-        assertEquals(before.commonerGroup(), after.commonerGroup());
         assertEquals(before.promotableGroups(), after.promotableGroups());
-        assertEquals(before.promotionCommand(), after.promotionCommand());
         assertEquals(before.rulesUrl(), after.rulesUrl());
         assertEquals(before.guideUrl(), after.guideUrl());
         assertEquals(before.guestInfoText(), after.guestInfoText());
@@ -257,11 +246,8 @@ class SettingsTest {
     @Test
     void with_texts() {
         Settings before = custom();
-        Settings after = before.withTexts(new TextsForm("member", "Badge_Z, pp_y", "grant <player>", "r2", "g2",
-                "gi2", "w2", "an2"));
-        assertEquals("member", after.commonerGroup());
+        Settings after = before.withTexts(new TextsForm("Badge_Z, pp_y", "r2", "g2", "gi2", "w2", "an2"));
         assertEquals(Set.of("badge_z", "pp_y"), after.promotableGroups());
-        assertEquals("grant <player>", after.promotionCommand());
         assertEquals("r2", after.rulesUrl());
         assertEquals("g2", after.guideUrl());
         assertEquals("gi2", after.guestInfoText());

@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 
 import org.bukkit.permissions.PermissionAttachment;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import com.mcmiddleearth.commonervote.domain.TextsForm;
 import com.mcmiddleearth.commonervote.storage.SettingsStore;
 import com.mcmiddleearth.commonervote.support.QueueExecutor;
 import com.mcmiddleearth.commonervote.support.ServiceTestBase;
+import com.mcmiddleearth.commonervote.support.TestDatabase;
 import com.mcmiddleearth.commonervote.ui.Texts;
 import com.mcmiddleearth.commonervote.ui.view.SettingsView;
 import com.mcmiddleearth.commonervote.ui.view.TextsView;
@@ -39,9 +42,9 @@ class SettingsServiceTest extends ServiceTestBase {
     private static final SettingsForm DEFAULT_NUMBERS = new SettingsForm(5, 100, 2, 1, true, true, true);
 
     /** Texts that are all valid and differ from the defaults in every field. */
-    private static final TextsForm NEW_TEXTS = new TextsForm("member", "Badge_Mod, guide ,",
-            "lp user <player> promote", "https://example.org/rules", "https://example.org/guide",
-            "Guests <votes_needed>", "Welcome!", "Hail <player>");
+    private static final TextsForm NEW_TEXTS = new TextsForm("Badge_Mod, guide ,",
+            "https://example.org/rules", "https://example.org/guide", "Guests <votes_needed>", "Welcome!",
+            "Hail <player>");
 
     private PlayerMock admin(String name) {
         PlayerMock player = guest(name);
@@ -267,34 +270,6 @@ class SettingsServiceTest extends ServiceTestBase {
     }
 
     @Test
-    void save_texts_rejects_bad_command() throws SQLException {
-        PlayerMock elrond = admin("Elrond");
-        Map<String, String> before = table();
-        TextsForm bad = new TextsForm("commoner", "", "lp user bilbo parent set commoner", "", "", "a", "b", "c");
-
-        configuring.saveTexts(elrond, bad);
-
-        assertEquals(Messages.settingsRejected("promotionCommand must contain <player>."),
-                elrond.nextComponentMessage());
-        assertNull(elrond.nextComponentMessage());
-        assertEquals(before, table());
-        assertEquals(Settings.defaults(), settings.get());
-    }
-
-    @Test
-    void save_texts_rejects_an_empty_group_and_names_every_problem() throws SQLException {
-        PlayerMock elrond = admin("Elrond");
-        Map<String, String> before = table();
-        TextsForm bad = new TextsForm("  ", "", "", "", "", "a", "b", "c");
-
-        configuring.saveTexts(elrond, bad);
-
-        assertEquals("[Vote] Not saved: commonerGroup must not be empty. promotionCommand must not be empty.",
-                Texts.plain(elrond.nextComponentMessage()));
-        assertEquals(before, table());
-    }
-
-    @Test
     void a_second_save_builds_on_the_first() throws SQLException {
         PlayerMock elrond = admin("Elrond");
 
@@ -304,6 +279,165 @@ class SettingsServiceTest extends ServiceTestBase {
         Settings expected = Settings.defaults().withNumbers(numbers(6)).withTexts(NEW_TEXTS);
         assertEquals(expected, settings.get());
         assertEquals(expected, stored());
+    }
+
+    // ---- the log of what was saved ----
+
+    /** The log lines about saved settings, oldest first. */
+    private List<String> saveLog() {
+        return logger.records(Level.INFO).stream().map(LogRecord::getMessage)
+                .filter(m -> m.startsWith("Settings: ")).toList();
+    }
+
+    private static String who(PlayerMock admin) {
+        return "Settings: " + admin.getName() + " (" + admin.getUniqueId() + ") ";
+    }
+
+    private static TextsForm welcoming(String welcomeText) {
+        Settings d = Settings.defaults();
+        return new TextsForm("", d.rulesUrl(), d.guideUrl(), d.guestInfoText(), welcomeText, d.announceText());
+    }
+
+    private void storeRow(String name, String value) throws SQLException {
+        TestDatabase.exec(database,
+                "UPDATE commonervote_settings SET value = '" + value + "' WHERE name = '" + name + "'");
+    }
+
+    @Test
+    void a_save_logs_who_changed_which_setting_from_what_to_what() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.save(elrond, new SettingsForm(7, 30, 2, 1, true, false, true));
+
+        assertEquals(List.of(who(elrond) + "changed votesNeeded from '5' to '7'",
+                who(elrond) + "changed validityDays from '100' to '30'",
+                who(elrond) + "changed xpBar from 'true' to 'false'"), saveLog());
+    }
+
+    @Test
+    void a_save_of_the_texts_logs_them_the_same_way() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+        Settings d = Settings.defaults();
+
+        configuring.saveTexts(elrond, new TextsForm("Badge_B, badge_a", d.rulesUrl(), "https://example.org/guide",
+                d.guestInfoText(), d.welcomeText(), "Hail <player>"));
+
+        assertEquals(List.of(who(elrond) + "changed promotableGroups from '' to 'badge_a,badge_b'",
+                who(elrond) + "changed guideUrl from '' to 'https://example.org/guide'",
+                who(elrond) + "changed announceText from '" + d.announceText() + "' to 'Hail <player>'"), saveLog());
+    }
+
+    @Test
+    void a_save_that_changes_nothing_says_so() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.save(elrond, DEFAULT_NUMBERS);
+
+        assertEquals(List.of(who(elrond) + "saved without changing anything"), saveLog());
+    }
+
+    @Test
+    void the_old_value_is_what_was_stored_and_not_what_this_server_had_cached() throws SQLException {
+        // Another server saved this a moment ago, and this server has not read it yet.
+        storeRow("validityDays", "33");
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.save(elrond, DEFAULT_NUMBERS);
+
+        assertEquals(List.of(who(elrond) + "changed validityDays from '33' to '100'"), saveLog());
+    }
+
+    @Test
+    void a_setting_without_a_row_is_logged_as_not_set() throws SQLException {
+        TestDatabase.exec(database, "DELETE FROM commonervote_settings WHERE name = 'validityDays'");
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.save(elrond, DEFAULT_NUMBERS);
+
+        assertEquals(List.of(who(elrond) + "changed validityDays from (not set) to '100'"), saveLog());
+    }
+
+    @Test
+    void a_value_stays_on_one_line_of_the_log() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+        String typed = "one\ntwo\r\n[Server] fake" + (char) 0x1B + "[31m" + (char) 0x85 + (char) 0x2028 + (char) 0x202E
+                + "end";
+
+        configuring.saveTexts(elrond, welcoming(typed));
+
+        assertTrue(saveLog().getFirst().endsWith(" to 'one two  [Server] fake [31m   end'"), saveLog().getFirst());
+        assertEquals(1, saveLog().size());
+    }
+
+    @Test
+    void a_value_cannot_pass_for_the_end_of_another() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.saveTexts(elrond, welcoming("a' to 'b"));
+        configuring.saveTexts(elrond, welcoming("c\\' to 'd"));
+
+        assertTrue(saveLog().get(0).endsWith(" to 'a\\' to \\'b'"), saveLog().get(0));
+        assertEquals(who(elrond) + "changed welcomeText from 'a\\' to \\'b' to 'c\\\\\\' to \\'d'", saveLog().get(1));
+    }
+
+    @Test
+    void a_section_sign_does_not_colour_the_log() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.saveTexts(elrond, welcoming("§chi"));
+
+        assertTrue(saveLog().getFirst().endsWith(" to ' chi'"), saveLog().getFirst());
+    }
+
+    @Test
+    void a_value_as_long_as_a_text_box_takes_is_logged_whole() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+        String longest = "w".repeat(1024);
+
+        configuring.saveTexts(elrond, welcoming(longest));
+
+        assertTrue(saveLog().getFirst().endsWith(" to '" + longest + "'"), saveLog().getFirst());
+    }
+
+    @Test
+    void a_longer_value_is_cut_and_says_how_long_it_was() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.saveTexts(elrond, welcoming("w".repeat(5000)));
+
+        assertTrue(saveLog().getFirst().endsWith(" to '" + "w".repeat(1024) + "...' (5000 characters)"),
+                saveLog().getFirst());
+    }
+
+    @Test
+    void a_refused_save_logs_nothing() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.save(elrond, numbers(25));
+
+        assertEquals(List.of(), saveLog());
+    }
+
+    @Test
+    void a_save_that_fails_logs_nothing() throws SQLException {
+        PlayerMock elrond = admin("Elrond");
+        breakDatabase();
+
+        configuring.save(elrond, numbers(10));
+
+        assertEquals(List.of(), saveLog());
+    }
+
+    @Test
+    void the_log_does_not_wait_for_the_main_thread() throws SQLException {
+        // A server that stops right after a save drops what is still on its way to the main thread.
+        main = new QueueExecutor();
+        build();
+        PlayerMock elrond = admin("Elrond");
+
+        configuring.save(elrond, numbers(10));
+
+        assertEquals(List.of(who(elrond) + "changed votesNeeded from '5' to '10'"), saveLog());
     }
 
     // ---- the buttons of the dialogs ----

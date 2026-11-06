@@ -22,8 +22,7 @@ import com.mcmiddleearth.commonervote.storage.SettingsStore;
  * <p>
  * What is wrong with the stored settings is logged as a WARNING, once per server run for each distinct message, so a
  * timer reloading every minute does not repeat it. The settings are used all the same: an unusable value has already
- * fallen back to its default in {@link Settings#fromMap}, and a text-field problem that {@link Settings#problems()}
- * finds is left for the owner to fix in the settings dialog.
+ * fallen back to its default in {@link Settings#fromMap}.
  */
 public final class SettingsCache {
 
@@ -65,9 +64,6 @@ public final class SettingsCache {
         return db.supply(() -> {
             Map<String, String> stored = store.load();
             Settings loaded = Settings.fromMap(stored, this::warnOnce);
-            for (String problem : loaded.problems()) {
-                warnOnce("Stored setting problem: " + problem);
-            }
             current = loaded;
             loadedOnce = true;
             return loaded;

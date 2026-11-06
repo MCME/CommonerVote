@@ -176,39 +176,4 @@ class SettingsCacheTest {
 
         assertEquals(3, cacheLog.records().size(), "a different bad value is a different warning");
     }
-
-    @Test
-    void problems_of_the_loaded_settings_are_warned_once_and_the_settings_are_still_used() throws Exception {
-        TestDatabase.exec(database,
-                "INSERT INTO commonervote_settings (name, value) VALUES ('promotionCommand', 'lp user bilbo')");
-        TestDatabase.exec(database, "INSERT INTO commonervote_settings (name, value) VALUES ('commonerGroup', '')");
-
-        Settings first = cache.reload().get();
-        cache.reload().get();
-        cache.reload().get();
-
-        List<LogRecord> warnings = cacheLog.records();
-        assertEquals(2, warnings.size(), "one warning per problem, however often the settings are reloaded");
-        for (LogRecord warning : warnings) {
-            assertEquals(Level.WARNING, warning.getLevel());
-        }
-        assertTrue(warnings.stream().anyMatch(w -> w.getMessage().contains("promotionCommand must contain <player>")),
-                warnings.toString());
-        assertTrue(warnings.stream().anyMatch(w -> w.getMessage().contains("commonerGroup must not be empty")),
-                warnings.toString());
-        assertEquals("lp user bilbo", first.promotionCommand(), "what was stored is still what the cache serves");
-        assertEquals("", cache.get().commonerGroup());
-    }
-
-    @Test
-    void parse_warnings_and_problems_do_not_hide_each_other() throws Exception {
-        TestDatabase.exec(database, "INSERT INTO commonervote_settings (name, value) VALUES ('votesNeeded', 'abc')");
-        TestDatabase.exec(database,
-                "INSERT INTO commonervote_settings (name, value) VALUES ('promotionCommand', 'lp user bilbo')");
-
-        cache.reload().get();
-        cache.reload().get();
-
-        assertEquals(2, cacheLog.records().size());
-    }
 }

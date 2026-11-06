@@ -113,8 +113,8 @@ class DialogSpecsTest {
     private static Settings withNumbers(int votesNeeded, int validityDays, int staffWeight, int teamWeight) {
         Settings d = Settings.defaults();
         return new Settings(votesNeeded, validityDays, staffWeight, teamWeight, d.autoPromote(), d.xpBar(),
-                d.broadcastNetwork(), d.commonerGroup(), d.promotableGroups(), d.promotionCommand(), d.rulesUrl(),
-                d.guideUrl(), d.guestInfoText(), d.welcomeText(), d.announceText());
+                d.broadcastNetwork(), d.promotableGroups(), d.rulesUrl(), d.guideUrl(), d.guestInfoText(),
+                d.welcomeText(), d.announceText());
     }
 
     private static VoteView newVote(Consumer<String> onCast) {
@@ -454,8 +454,8 @@ class DialogSpecsTest {
     @Test
     void texts_spec_fits() {
         Settings d = Settings.defaults();
-        Settings longWelcome = d.withTexts(new TextsForm(d.commonerGroup(), "builder,badge", d.promotionCommand(),
-                d.rulesUrl(), d.guideUrl(), d.guestInfoText(), "w".repeat(2000), d.announceText()));
+        Settings longWelcome = d.withTexts(new TextsForm("builder,badge", d.rulesUrl(), d.guideUrl(), d.guestInfoText(),
+                "w".repeat(2000), d.announceText()));
         DialogSpec spec = DialogSpecs.texts(new TextsView(longWelcome, (p, f) -> { }));
 
         TextInput welcome = input(spec, "welcome_text", TextInput.class);
@@ -463,8 +463,8 @@ class DialogSpecsTest {
         assertEquals("w".repeat(1024), welcome.initial());
 
         Set<String> longTexts = Set.of("guest_info_text", "welcome_text", "announce_text");
-        assertEquals(List.of("commoner_group", "promotable_groups", "promotion_command", "rules_url", "guide_url",
-                "guest_info_text", "welcome_text", "announce_text"),
+        assertEquals(List.of("promotable_groups", "rules_url", "guide_url", "guest_info_text", "welcome_text",
+                "announce_text"),
                 spec.inputs().stream().map(InputSpec::key).toList());
         for (InputSpec in : spec.inputs()) {
             TextInput text = assertInstanceOf(TextInput.class, in);
@@ -475,7 +475,6 @@ class DialogSpecsTest {
             assertTrue(text.initial().length() <= text.maxLength(), text.key());
         }
         assertEquals("badge, builder", input(spec, "promotable_groups", TextInput.class).initial());
-        assertEquals(d.promotionCommand(), input(spec, "promotion_command", TextInput.class).initial());
         assertEquals(List.of("Save for all servers"), labels(spec.buttons()));
         assertClose(spec.exit(), "Back");
     }
@@ -485,12 +484,10 @@ class DialogSpecsTest {
         AtomicReference<TextsForm> saved = new AtomicReference<>();
         DialogSpec spec = DialogSpecs.texts(new TextsView(Settings.defaults(), (p, form) -> saved.set(form)));
 
-        click(button(spec, "Save for all servers"), values(Map.of("commoner_group", "citizen",
-                "promotable_groups", "a, b", "promotion_command", "promote <player>", "rules_url", "https://r",
-                "guide_url", "https://g", "guest_info_text", "guest", "welcome_text", "welcome",
-                "announce_text", "announce")));
-        assertEquals(new TextsForm("citizen", "a, b", "promote <player>", "https://r", "https://g", "guest", "welcome",
-                "announce"), saved.get());
+        click(button(spec, "Save for all servers"), values(Map.of("promotable_groups", "a, b",
+                "rules_url", "https://r", "guide_url", "https://g", "guest_info_text", "guest",
+                "welcome_text", "welcome", "announce_text", "announce")));
+        assertEquals(new TextsForm("a, b", "https://r", "https://g", "guest", "welcome", "announce"), saved.get());
     }
 
     // ---- what Paper would refuse ----
