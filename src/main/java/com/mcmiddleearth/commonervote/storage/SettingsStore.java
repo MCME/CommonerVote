@@ -33,15 +33,9 @@ public final class SettingsStore {
 
     /** Every stored setting as name and value, in no particular order. Empty when nothing is stored yet. */
     public Map<String, String> load() throws SQLException {
-        Map<String, String> values = new LinkedHashMap<>();
-        try (Connection c = factory.open();
-             PreparedStatement ps = c.prepareStatement("SELECT name, value FROM commonervote_settings");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                values.put(rs.getString(1), rs.getString(2));
-            }
+        try (Connection c = factory.open()) {
+            return read(c);
         }
-        return values;
     }
 
     /**
@@ -65,29 +59,56 @@ public final class SettingsStore {
     }
 
     /**
+     * Deletes the rows of the promotion command and group, which 2.0.0 kept here and which are not read any more. A
+     * return to 2.0.0 seeds its defaults for both.
+     */
+    public void removeRetired() throws SQLException {
+        inTransaction(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "DELETE FROM commonervote_settings WHERE name IN ('promotionCommand','commonerGroup')")) {
+                ps.executeUpdate();
+            }
+        });
+    }
+
+    /**
      * Writes all settings. When {@code votesNeeded} differs from the stored value, every vote weight is rescaled
      * first, in the same transaction. If anything fails, nothing is changed.
      *
+     * @return every stored setting as name and value, as they were right before this save
      * @throws IllegalArgumentException if {@link Settings#problems()} is not empty, before any connection is
      *                                  opened. A {@code votesNeeded} outside its range must never be stored: it
      *                                  would rescale the weights, and {@link Settings#fromMap} would then read it
      *                                  back as the default, leaving every vote worth the wrong share for good.
      */
-    public void save(Settings s) throws SQLException {
+    public Map<String, String> save(Settings s) throws SQLException {
         List<String> problems = s.problems();
         if (!problems.isEmpty()) {
             throw new IllegalArgumentException("Settings not saved: " + String.join(" ", problems));
         }
         Map<String, String> values = s.toMap();
-        inTransaction(c -> {
+        return Transactions.run(factory, c -> {
             // The lock serialises two saves, so neither can rescale from a value the other is changing, and it
             // is the same lock a vote takes first (see lockWeightSettings).
             int stored = lockWeightSettings(c).votesNeeded();
+            Map<String, String> before = read(c);
             if (stored != s.votesNeeded()) {
                 rescaleVotes(c, stored, s.votesNeeded());
             }
             write(c, values);
+            return before;
         });
+    }
+
+    private static Map<String, String> read(Connection c) throws SQLException {
+        Map<String, String> values = new LinkedHashMap<>();
+        try (PreparedStatement ps = c.prepareStatement("SELECT name, value FROM commonervote_settings");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                values.put(rs.getString(1), rs.getString(2));
+            }
+        }
+        return values;
     }
 
     private void insertMissing(Map<String, String> defaults) throws SQLException {

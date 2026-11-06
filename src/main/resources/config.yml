@@ -1,4 +1,8 @@
-# CommonerVote 2 keeps its settings in the database; change them in game with /vote config.
+# CommonerVote 2 keeps most of its settings in the database; change those in game with /vote config.
+# The promotion is set here, for this server only. The console runs promotionCommand, which must contain <player> (the
+# player's UUID) and may contain <group>. commonerGroupName is one LuckPerms group: letters, digits, _ and -.
+promotionCommand: 'lp user <player> parent set <group>'
+commonerGroupName: commoner
 database:
   dbName: development
   user: development

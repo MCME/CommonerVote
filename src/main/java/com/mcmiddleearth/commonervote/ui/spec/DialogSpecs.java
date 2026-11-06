@@ -56,7 +56,7 @@ public final class DialogSpecs {
 
     /** The longest reason, the width of the {@code reason} column. */
     static final int REASON_LENGTH = 150;
-    /** The longest group list, promotion command or link. */
+    /** The longest group list or link. */
     static final int SHORT_TEXT_LENGTH = 256;
     /** The longest guest info, welcome or announcement text. */
     static final int LONG_TEXT_LENGTH = 1024;
@@ -196,25 +196,24 @@ public final class DialogSpecs {
                         click(view.onTexts()))), CANCEL, 2, EDITING_CLICK_LIFETIME);
     }
 
-    /** The groups, the promotion command, the links and the three texts of the shared settings. */
+    /** The groups that may be promoted, the links and the three texts of the shared settings. */
     public static DialogSpec texts(TextsView view) {
         Settings s = view.current();
         List<InputSpec> inputs = List.of(
-                shortText("commoner_group", "Commoner group", s.commonerGroup()),
                 shortText("promotable_groups", "Groups that may be promoted (comma-separated)",
                         String.join(", ", new TreeSet<>(s.promotableGroups()))),
-                shortText("promotion_command", "Promotion command", s.promotionCommand()),
                 shortText("rules_url", "Rules link", s.rulesUrl()),
                 shortText("guide_url", "Building guide link (empty for none)", s.guideUrl()),
                 longText("guest_info_text", "Guest info text", s.guestInfoText()),
                 longText("welcome_text", "Welcome text", s.welcomeText()),
                 longText("announce_text", "Promotion announcement", s.announceText()));
-        Callback save = new Callback((p, v) -> view.onSave().accept(p, new TextsForm(v.text("commoner_group"),
-                v.text("promotable_groups"), v.text("promotion_command"), v.text("rules_url"), v.text("guide_url"),
-                v.text("guest_info_text"), v.text("welcome_text"), v.text("announce_text"))));
+        Callback save = new Callback((p, v) -> view.onSave().accept(p, new TextsForm(
+                v.text("promotable_groups"), v.text("rules_url"), v.text("guide_url"), v.text("guest_info_text"),
+                v.text("welcome_text"), v.text("announce_text"))));
         return new DialogSpec(text("Texts and links"), List.of(
-                text("The promotion command may use <player> and <group>."),
-                text("The three texts are MiniMessage and may use <player>, <votes_needed> and <validity_days>.")),
+                text("The promotion command and the Commoner group are set in each server's config.yml."),
+                text("The three texts are MiniMessage, for colours and formatting only, and may use <player>, "
+                        + "<votes_needed> and <validity_days>.")),
                 inputs, List.of(button("Save for all servers", save)), closing("Back"), 1, EDITING_CLICK_LIFETIME);
     }
 
