@@ -5,6 +5,25 @@ All notable changes to CommonerVote are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-11-06
+
+### Changed
+- The promotion command and the commoner group are set in each server's `config.yml`, under the keys 1.2.9 used
+  (`promotionCommand`, `commonerGroupName`), and no longer with `/vote config`. A missing key gets the default, and the
+  first start deletes the two old rows from `commonervote_settings`.
+- A value in those two keys that cannot be used logs a SEVERE line and disables the plugin on that server. The group
+  must be one name of letters, digits, `_` and `-`, and the command must be one line that contains `<player>`. Both must
+  be text, so a number or `no` needs quotes.
+- The welcome, announcement and guest texts allow colours and formatting only. Any other tag stays in the text as typed.
+
+### Added
+- Every save of the settings is logged: who made it and, for each setting it changed, the old and the new value.
+- The startup log states the promotion command and group in use.
+
+### Fixed
+- A stored text that MiniMessage cannot parse, such as one with an old `§` colour code, now shows as typed. It used to
+  stop whatever was showing it, which could leave a promotion without its welcome and announcement.
+
 ## [2.0.0] - 2026-10-21
 
 A rewrite for Paper 26.2 and Java 25. The votes table is unchanged, so every existing vote carries over.
@@ -85,4 +104,5 @@ A rewrite for Paper 26.2 and Java 25. The votes table is unchanged, so every exi
 - The Votifier `loadbefore` entry and `load: STARTUP` in `plugin.yml`.
 - The `commonervote.voter` permission, which nothing checked.
 
+[2.0.1]: https://github.com/MCME/CommonerVote/releases/tag/v2.0.1
 [2.0.0]: https://github.com/MCME/CommonerVote/releases/tag/v2.0.0
