@@ -200,6 +200,21 @@ class SettingsStoreTest {
     }
 
     @Test
+    void save_gives_what_the_table_held_before() throws SQLException {
+        assertEquals(Map.of(), store.save(Settings.defaults().withNumbers(form(5, 50))));
+
+        TestDatabase.exec(db, "UPDATE commonervote_settings SET value = '33' WHERE name = 'validityDays'");
+        TestDatabase.exec(db, "INSERT INTO commonervote_settings (name, value) VALUES ('leftover', 'x')");
+
+        Map<String, String> before = store.save(Settings.defaults().withNumbers(form(5, 60)));
+
+        assertEquals("33", before.get("validityDays"));
+        assertEquals("5", before.get("votesNeeded"));
+        assertEquals("x", before.get("leftover"));
+        assertEquals(14, before.size());
+    }
+
+    @Test
     void every_setting_survives_a_round_trip_including_odd_text() throws SQLException {
         Settings custom = new Settings(7, 50, 3, 2, false, false, false, Set.of("badge_a", "badge_b"),
                 "https://example.org/rules", "https://example.org/guide",

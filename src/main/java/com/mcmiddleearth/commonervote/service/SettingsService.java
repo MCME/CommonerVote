@@ -1,9 +1,12 @@
 package com.mcmiddleearth.commonervote.service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 import org.bukkit.entity.Player;
 
@@ -14,6 +17,7 @@ import com.mcmiddleearth.commonervote.domain.TextsForm;
 import com.mcmiddleearth.commonervote.storage.DbExecutor;
 import com.mcmiddleearth.commonervote.storage.SettingsStore;
 import com.mcmiddleearth.commonervote.ui.DialogPresenter;
+import com.mcmiddleearth.commonervote.ui.Texts;
 import com.mcmiddleearth.commonervote.ui.view.SettingsView;
 import com.mcmiddleearth.commonervote.ui.view.TextsView;
 
@@ -39,27 +43,43 @@ import com.mcmiddleearth.commonervote.ui.view.TextsView;
  * failure of the write is answered with {@link Messages#databaseDown()}; the cache keeps its settings, since they were
  * not stored.
  * <p>
+ * <b>The log.</b> Every save that is stored logs who made it and, for each setting it changed, the old and new value.
+ * The old value is what the table held, read in the save's own transaction: the cache can be behind it. The lines are
+ * written on the database thread as soon as the save is stored, since a server that stops then drops the continuation.
+ * A value goes in as one quoted line, however it was typed.
+ * <p>
  * <b>Permissions.</b> A dialog can outlive the permission it was opened with, so every method checks
  * {@link Permissions#CONFIG} again, also in the callbacks of the dialogs, and answers {@link Messages#noPermission()}.
  */
 public final class SettingsService {
+
+    /**
+     * What could break up a log line or change how it reads: control and format characters, line separators, and the
+     * section sign of the old colour codes.
+     */
+    private static final Pattern NOT_FOR_THE_LOG = Pattern.compile("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}§]");
+
+    /** The most of one value that the log shows: what the longest text box of the dialogs takes. */
+    private static final int MOST_LOGGED = 1024;
 
     private final DbExecutor db;
     private final Continuations continuations;
     private final SettingsStore store;
     private final SettingsCache cache;
     private final DialogPresenter presenter;
+    private final Logger logger;
 
     /**
      * @param main runs work on the server's main thread
      */
     public SettingsService(DbExecutor db, Executor main, SettingsStore store, SettingsCache cache,
-                           DialogPresenter presenter) {
+                           DialogPresenter presenter, Logger logger) {
         this.db = Objects.requireNonNull(db);
         this.continuations = new Continuations(main);
         this.store = Objects.requireNonNull(store);
         this.cache = Objects.requireNonNull(cache);
         this.presenter = Objects.requireNonNull(presenter);
+        this.logger = Objects.requireNonNull(logger);
     }
 
     /** {@code /vote config}: the dialog for the numbers and switches, filled with the stored settings. */
@@ -116,8 +136,9 @@ public final class SettingsService {
             admin.sendMessage(Messages.settingsRejected(String.join(" ", problems)));
             return;
         }
+        String who = admin.getName() + " (" + admin.getUniqueId() + ")";
         continuations.onMain(db.supply(() -> {
-            store.save(updated);
+            logChanges(who, store.save(updated), updated.toMap());
             return updated;
         }), (saved, error) -> {
             if (error != null) {
@@ -128,6 +149,37 @@ public final class SettingsService {
             cache.replace(saved);
             Continuations.tell(admin, Messages.settingsSaved());
         });
+    }
+
+    private void logChanges(String who, Map<String, String> before, Map<String, String> after) {
+        boolean changed = false;
+        for (Map.Entry<String, String> setting : after.entrySet()) {
+            String old = before.get(setting.getKey());
+            if (!setting.getValue().equals(old)) {
+                changed = true;
+                logger.info("Settings: " + who + " changed " + setting.getKey() + " from " + forLog(old) + " to "
+                        + forLog(setting.getValue()));
+            }
+        }
+        if (!changed) {
+            logger.info("Settings: " + who + " saved without changing anything");
+        }
+    }
+
+    /** A stored value as one quoted line, cut if it is longer than a dialog takes; {@code null} when it has no row. */
+    private static String forLog(String value) {
+        if (value == null) {
+            return "(not set)";
+        }
+        String oneLine = NOT_FOR_THE_LOG.matcher(value).replaceAll(" ");
+        return oneLine.length() <= MOST_LOGGED
+                ? quoted(oneLine)
+                : quoted(Texts.fit(oneLine, MOST_LOGGED) + "...") + " (" + oneLine.length() + " characters)";
+    }
+
+    /** In quotes, with the quotes inside escaped, so that a value shows where it ends. */
+    private static String quoted(String value) {
+        return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'";
     }
 
     private static boolean allowed(Player admin) {

@@ -109,7 +109,7 @@ public class CommonerVotePlugin extends JavaPlugin {
                 clock);
         reviewing = new ReviewService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
                 clock);
-        configuring = new SettingsService(db, main, settingsStore, settings, presenter);
+        configuring = new SettingsService(db, main, settingsStore, settings, presenter, logger);
         // Before anything can send: a send on a channel that is not registered throws.
         messenger.register();
 

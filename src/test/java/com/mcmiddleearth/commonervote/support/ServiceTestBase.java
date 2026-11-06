@@ -137,7 +137,7 @@ public abstract class ServiceTestBase {
                 () -> now);
         reviewing = new ReviewService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
                 () -> now);
-        configuring = new SettingsService(db, main, settingsStore, settings, presenter);
+        configuring = new SettingsService(db, main, settingsStore, settings, presenter, logger);
     }
 
     /**
