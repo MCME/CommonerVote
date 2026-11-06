@@ -27,7 +27,7 @@ import com.mcmiddleearth.commonervote.ui.view.TextsView;
  * comes back through {@code main}; an admin who has quit in the meantime is told nothing and shown nothing.
  * <p>
  * <b>Opening.</b> Both dialogs first reload the cache, so they show (and a save then builds on) what is stored now,
- * not what this server loaded up to a minute ago. A save writes all fifteen settings, so a stale cache would otherwise
+ * not what this server loaded up to a minute ago. A save writes every setting, so a stale cache would otherwise
  * undo what another server saved meanwhile. If the reload fails, the dialog opens with the cached settings: a possibly
  * stale dialog is better than none, and the {@link DbExecutor} has logged the failure. The admin is told nothing then.
  * But if the settings have never loaded on this server ({@link SettingsCache#loaded()}), the cache holds only the
@@ -71,7 +71,7 @@ public final class SettingsService {
                 presenter.showSettings(admin, new SettingsView(current, this::openTexts, this::save)));
     }
 
-    /** The second page of {@code /vote config}: the dialog for the groups, the promotion command, links and texts. */
+    /** The second page of {@code /vote config}: the dialog for the groups that may be promoted, links and texts. */
     public void openTexts(Player admin) {
         if (!allowed(admin)) {
             return;

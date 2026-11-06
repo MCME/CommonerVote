@@ -17,6 +17,7 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
+import com.mcmiddleearth.commonervote.domain.PromotionConfig;
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.service.ProfileCache;
 import com.mcmiddleearth.commonervote.service.PromotionService;
@@ -65,6 +66,8 @@ public abstract class ServiceTestBase {
     protected Executor main;
     /** The current time of the services, in epoch milliseconds. */
     protected long now = NOW;
+    /** What config.yml says about promoting: the defaults, unless a test swaps it and calls {@link #build()}. */
+    protected PromotionConfig promotionConfig = PromotionConfig.defaults();
     /** Whether {@link #build()} fills the settings cache; see {@link #neverLoadSettings()}. */
     private boolean settingsLoaded = true;
 
@@ -128,8 +131,8 @@ public abstract class ServiceTestBase {
             settings.replace(storedSettings());
         }
         xp = new XpBarService(settings::get);
-        promotion = new PromotionService(db, main, votes, promotions, settings, ranks, messenger, presenter, xp,
-                commands, logger, () -> now);
+        promotion = new PromotionService(db, main, votes, promotions, settings, promotionConfig, ranks, messenger,
+                presenter, xp, commands, logger, () -> now);
         voting = new VoteService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
                 () -> now);
         reviewing = new ReviewService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
@@ -251,7 +254,7 @@ public abstract class ServiceTestBase {
         return new PromotionStore(database).find(player);
     }
 
-    /** The console command that the default settings run to promote {@code player}: it names them by UUID. */
+    /** The console command that {@link PromotionConfig#defaults()} runs to promote {@code player}: by UUID. */
     protected static String promotionCommand(UUID player) {
         return "lp user " + player + " parent set commoner";
     }

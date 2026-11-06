@@ -21,6 +21,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 import com.mcmiddleearth.commonervote.Permissions;
+import com.mcmiddleearth.commonervote.domain.PromotionConfig;
 import com.mcmiddleearth.commonervote.domain.PromotionGuard;
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.domain.VoteMath;
@@ -66,6 +67,7 @@ public final class PromotionService {
     private final VoteStore votes;
     private final PromotionStore promotions;
     private final SettingsCache settings;
+    private final PromotionConfig config;
     private final RankService ranks;
     private final Messenger messenger;
     private final DialogPresenter presenter;
@@ -97,13 +99,15 @@ public final class PromotionService {
      * @param clock the time in epoch milliseconds
      */
     public PromotionService(DbExecutor db, Executor main, VoteStore votes, PromotionStore promotions,
-                            SettingsCache settings, RankService ranks, Messenger messenger, DialogPresenter presenter,
-                            XpBarService xp, CommandRunner runner, Logger logger, LongSupplier clock) {
+                            SettingsCache settings, PromotionConfig config, RankService ranks, Messenger messenger,
+                            DialogPresenter presenter, XpBarService xp, CommandRunner runner, Logger logger,
+                            LongSupplier clock) {
         this.db = Objects.requireNonNull(db);
         this.main = Objects.requireNonNull(main);
         this.votes = Objects.requireNonNull(votes);
         this.promotions = Objects.requireNonNull(promotions);
         this.settings = Objects.requireNonNull(settings);
+        this.config = Objects.requireNonNull(config);
         this.ranks = Objects.requireNonNull(ranks);
         this.messenger = Objects.requireNonNull(messenger);
         this.presenter = Objects.requireNonNull(presenter);
@@ -165,7 +169,7 @@ public final class PromotionService {
      */
     public void promoteNow(CommandSender admin, UUID target, String name) {
         if (!settings.loaded()) {
-            admin.sendMessage(Messages.databaseDown()); // the default command and group may not be the stored ones
+            admin.sendMessage(Messages.databaseDown()); // the default groups that may be promoted may not be the stored ones
             return;
         }
         Object attempt = new Object();
@@ -308,10 +312,7 @@ public final class PromotionService {
             inProgress.remove(id, attempt);
             return new Outcome.Blocked(guard.blockingGroup().orElseThrow());
         }
-        // <player> is the UUID, never a name: a shown name can be stale (a renamed guest's old name may be someone
-        // else's now), and LuckPerms takes a UUID wherever it takes a name.
-        String command = s.promotionCommand().replace("<player>", id.toString())
-                .replace("<group>", s.commonerGroup());
+        String command = config.commandFor(id);
         logger.info("Promoting " + name + " (" + source.name().toLowerCase(Locale.ROOT) + "): " + command);
         // Marked before it runs: if running it throws, it may still have taken effect, so it is never run again.
         commandRan.add(id);

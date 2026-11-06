@@ -39,9 +39,9 @@ class SettingsServiceTest extends ServiceTestBase {
     private static final SettingsForm DEFAULT_NUMBERS = new SettingsForm(5, 100, 2, 1, true, true, true);
 
     /** Texts that are all valid and differ from the defaults in every field. */
-    private static final TextsForm NEW_TEXTS = new TextsForm("member", "Badge_Mod, guide ,",
-            "lp user <player> promote", "https://example.org/rules", "https://example.org/guide",
-            "Guests <votes_needed>", "Welcome!", "Hail <player>");
+    private static final TextsForm NEW_TEXTS = new TextsForm("Badge_Mod, guide ,",
+            "https://example.org/rules", "https://example.org/guide", "Guests <votes_needed>", "Welcome!",
+            "Hail <player>");
 
     private PlayerMock admin(String name) {
         PlayerMock player = guest(name);
@@ -264,34 +264,6 @@ class SettingsServiceTest extends ServiceTestBase {
         assertEquals(Set.of("badge_mod", "guide"), stored().promotableGroups());
         assertEquals(Messages.settingsSaved(), elrond.nextComponentMessage());
         assertNull(elrond.nextComponentMessage());
-    }
-
-    @Test
-    void save_texts_rejects_bad_command() throws SQLException {
-        PlayerMock elrond = admin("Elrond");
-        Map<String, String> before = table();
-        TextsForm bad = new TextsForm("commoner", "", "lp user bilbo parent set commoner", "", "", "a", "b", "c");
-
-        configuring.saveTexts(elrond, bad);
-
-        assertEquals(Messages.settingsRejected("promotionCommand must contain <player>."),
-                elrond.nextComponentMessage());
-        assertNull(elrond.nextComponentMessage());
-        assertEquals(before, table());
-        assertEquals(Settings.defaults(), settings.get());
-    }
-
-    @Test
-    void save_texts_rejects_an_empty_group_and_names_every_problem() throws SQLException {
-        PlayerMock elrond = admin("Elrond");
-        Map<String, String> before = table();
-        TextsForm bad = new TextsForm("  ", "", "", "", "", "a", "b", "c");
-
-        configuring.saveTexts(elrond, bad);
-
-        assertEquals("[Vote] Not saved: commonerGroup must not be empty. promotionCommand must not be empty.",
-                Texts.plain(elrond.nextComponentMessage()));
-        assertEquals(before, table());
     }
 
     @Test

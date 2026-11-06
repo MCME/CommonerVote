@@ -11,6 +11,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.mcmiddleearth.commonervote.command.VoteCommand;
+import com.mcmiddleearth.commonervote.domain.PromotionConfig;
 import com.mcmiddleearth.commonervote.domain.Settings;
 import com.mcmiddleearth.commonervote.listener.PlayerListener;
 import com.mcmiddleearth.commonervote.network.BungeeMessenger;
@@ -53,7 +54,7 @@ public class CommonerVotePlugin extends JavaPlugin {
     /** The config.yml keys of 1.2.9 that 2.0 no longer reads: these settings live in the database now. */
     private static final List<String> LEGACY_KEYS = List.of("validityPeriod", "staffWeight", "otherWeight",
             "votesNeeded", "allowMultipleVotes", "automatedPromotion", "useXpBar", "applicationNeeded",
-            "commonerGroupName", "promotionMessage", "promotionCommand", "useDatabase");
+            "promotionMessage", "useDatabase");
 
     /** How often the shared settings are read again, for what another server saved: every minute, in ticks. */
     private static final long SETTINGS_REFRESH_TICKS = 1200;
@@ -75,6 +76,10 @@ public class CommonerVotePlugin extends JavaPlugin {
         DatabaseConfig databaseConfig = DatabaseConfig.from(getConfig().getConfigurationSection("database"));
         boolean useBungee = getConfig().getBoolean("useBungee", true);
         logLegacyKeys(getConfig());
+        PromotionConfig promotionConfig = readPromotionConfig(getConfig());
+        if (promotionConfig == null) {
+            return; // readPromotionConfig has disabled the plugin
+        }
 
         RankService ranks = createRankService();
         if (ranks == null) {
@@ -98,8 +103,8 @@ public class CommonerVotePlugin extends JavaPlugin {
         // service: the lambda reads the field when a message arrives, which is after register() below.
         messenger = new BungeeMessenger(this, settings::get, useBungee,
                 (player, kind) -> promotion.onRemoteUpdate(player, kind));
-        promotion = new PromotionService(db, main, votes, promotions, settings, ranks, messenger, presenter, xp,
-                commands, logger, clock);
+        promotion = new PromotionService(db, main, votes, promotions, settings, promotionConfig, ranks, messenger,
+                presenter, xp, commands, logger, clock);
         voting = new VoteService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
                 clock);
         reviewing = new ReviewService(db, main, votes, settings, ranks, profiles, messenger, presenter, xp, promotion,
@@ -115,6 +120,7 @@ public class CommonerVotePlugin extends JavaPlugin {
         AtomicBoolean setUpDone = new AtomicBoolean();
         Runnable setUp = () -> db.supply(() -> {
             Schema.create(connections);
+            settingsStore.removeRetired();
             settingsStore.seedMissing(Settings.defaults().toMap());
             setUpDone.set(true);
             return null;
@@ -224,6 +230,33 @@ public class CommonerVotePlugin extends JavaPlugin {
                 getServer().getScheduler().runTask(this, task);
             }
         };
+    }
+
+    /**
+     * The promotion command and group from config.yml, which the log then states. A key that is missing or has no
+     * value gives its default. A value that is there but cannot be used logs SEVERE, disables the plugin and gives null:
+     * promoting with a default instead of what the owner wrote could put real players in the wrong group.
+     */
+    private PromotionConfig readPromotionConfig(FileConfiguration config) {
+        PromotionConfig defaults = PromotionConfig.defaults();
+        PromotionConfig read = new PromotionConfig(text(config, PromotionConfig.COMMAND_KEY, defaults.command()),
+                text(config, PromotionConfig.GROUP_KEY, defaults.group()));
+        List<String> problems = read.problems();
+        if (problems.isEmpty()) {
+            getLogger().info("A promotion runs: " + read.command() + " (group: " + read.group() + ")");
+            return read;
+        }
+        getLogger().severe("config.yml cannot be used: " + String.join(" ", problems) + " CommonerVote is disabled.");
+        getServer().getPluginManager().disablePlugin(this);
+        return null;
+    }
+
+    /**
+     * The text at a key. Bukkit's getString would turn a list or an unquoted number or {@code no} into text that looks
+     * usable; those give {@code ""} here, which {@link PromotionConfig#problems()} refuses.
+     */
+    private static String text(FileConfiguration config, String key, String fallback) {
+        return config.get(key, fallback) instanceof String s ? s : "";
     }
 
     /**

@@ -65,6 +65,19 @@ public final class SettingsStore {
     }
 
     /**
+     * Deletes the rows of the promotion command and group, which 2.0.0 kept here and which are not read any more. A
+     * return to 2.0.0 seeds its defaults for both.
+     */
+    public void removeRetired() throws SQLException {
+        inTransaction(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "DELETE FROM commonervote_settings WHERE name IN ('promotionCommand','commonerGroup')")) {
+                ps.executeUpdate();
+            }
+        });
+    }
+
+    /**
      * Writes all settings. When {@code votesNeeded} differs from the stored value, every vote weight is rescaled
      * first, in the same transaction. If anything fails, nothing is changed.
      *

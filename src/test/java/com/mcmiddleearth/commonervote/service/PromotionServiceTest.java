@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 
 import com.mcmiddleearth.commonervote.Permissions;
+import com.mcmiddleearth.commonervote.domain.PromotionConfig;
 import com.mcmiddleearth.commonervote.network.Messenger;
 import com.mcmiddleearth.commonervote.network.Messenger.Update;
 import com.mcmiddleearth.commonervote.rank.RankService;
@@ -25,6 +26,7 @@ import com.mcmiddleearth.commonervote.storage.PromotionRecord;
 import com.mcmiddleearth.commonervote.storage.PromotionRecord.Source;
 import com.mcmiddleearth.commonervote.support.QueueExecutor;
 import com.mcmiddleearth.commonervote.support.ServiceTestBase;
+import com.mcmiddleearth.commonervote.support.TestDatabase;
 import com.mcmiddleearth.commonervote.ui.DialogPresenter;
 import com.mcmiddleearth.commonervote.ui.Texts;
 import com.mcmiddleearth.commonervote.ui.view.WelcomeView;
@@ -85,14 +87,37 @@ class PromotionServiceTest extends ServiceTestBase {
     }
 
     @Test
-    void the_command_uses_the_stored_command_and_group() throws SQLException {
-        setting("promotionCommand", "lp user <player> parent add <group>");
-        setting("commonerGroup", "citizen");
+    void the_command_comes_from_the_promotion_config() throws SQLException {
+        promotionConfig = new PromotionConfig("lp user <player> parent add <group>", "citizen");
+        build();
         PlayerMock bilbo = guest("Bilbo_B");
 
         promotion.checkAutoPromotion(bilbo, 1.0);
 
         assertEquals(List.of("lp user " + bilbo.getUniqueId() + " parent add citizen"), commands.commands());
+    }
+
+    @Test
+    void old_rows_in_the_settings_table_are_not_used() throws SQLException {
+        storeRaw("promotionCommand", "something else <player>");
+        storeRaw("commonerGroup", "other");
+        build();
+        PlayerMock bilbo = guest("Bilbo_B");
+
+        promotion.checkAutoPromotion(bilbo, 1.0);
+        settings.reload();
+        PlayerMock frodo = guest("Frodo_B");
+        promotion.checkAutoPromotion(frodo, 1.0);
+
+        assertEquals(List.of(promotionCommand(bilbo.getUniqueId()), promotionCommand(frodo.getUniqueId())),
+                commands.commands());
+    }
+
+    /** Puts a row in the settings table with no regard for what the plugin itself would write, seeded or not. */
+    private void storeRaw(String name, String value) throws SQLException {
+        TestDatabase.exec(database, "DELETE FROM commonervote_settings WHERE name = '" + name + "'");
+        TestDatabase.exec(database,
+                "INSERT INTO commonervote_settings (name, value) VALUES ('" + name + "', '" + value + "')");
     }
 
     @Test
@@ -733,8 +758,8 @@ class PromotionServiceTest extends ServiceTestBase {
     void a_failed_announcement_comes_after_the_local_steps() throws SQLException {
         Messenger broken = mock(Messenger.class);
         doThrow(new IllegalStateException("channel not registered")).when(broken).announce(any());
-        PromotionService service = new PromotionService(db, main, votes, promotions, settings, ranks, broken,
-                presenter, xp, commands, logger, () -> now);
+        PromotionService service = new PromotionService(db, main, votes, promotions, settings, promotionConfig, ranks,
+                broken, presenter, xp, commands, logger, () -> now);
         PlayerMock elrond = staff("Elrond");
         PlayerMock bilbo = guest("Bilbo_B");
         bilbo.setExp(0.8f);
@@ -754,8 +779,8 @@ class PromotionServiceTest extends ServiceTestBase {
     @Test
     void rank_lookup_failure() throws SQLException {
         RankService failing = new FailingRanks();
-        PromotionService service = new PromotionService(db, main, votes, promotions, settings, failing, messenger,
-                presenter, xp, commands, logger, () -> now);
+        PromotionService service = new PromotionService(db, main, votes, promotions, settings, promotionConfig, failing,
+                messenger, presenter, xp, commands, logger, () -> now);
         PlayerMock elrond = staff("Elrond");
         PlayerMock bilbo = guest("Bilbo_B");
 
@@ -772,8 +797,8 @@ class PromotionServiceTest extends ServiceTestBase {
     void a_failing_step_is_logged_not_lost() {
         DialogPresenter broken = mock(DialogPresenter.class);
         doThrow(new IllegalStateException("dialog rejected")).when(broken).showWelcome(any(), any());
-        PromotionService service = new PromotionService(db, main, votes, promotions, settings, ranks, messenger,
-                broken, xp, commands, logger, () -> now);
+        PromotionService service = new PromotionService(db, main, votes, promotions, settings, promotionConfig, ranks,
+                messenger, broken, xp, commands, logger, () -> now);
         PlayerMock bilbo = guest("Bilbo_B");
 
         assertDoesNotThrow(() -> service.checkAutoPromotion(bilbo, 1.0));
